@@ -47,6 +47,19 @@ const vibrate = ref(true)
 const openZulipApp = ref(true)
 const notificationSound = ref<string | null>(null)
 const notificationSoundTitle = ref<string | null>(null)
+// filters
+const notifyOnMention = ref(true)
+const notifyOnPM = ref(true)
+const notifyOnOther = ref(false)
+const muteSelfMessages = ref(true)
+const mutedStreams = ref<string[]>([])
+const mutedTopics = ref<string[]>([])
+const mutedStreamsInput = ref('')
+const mutedTopicsInput = ref('')
+// quiet hours
+const quietHoursEnabled = ref(false)
+const quietHoursStart = ref('22:00')
+const quietHoursEnd = ref('07:00')
 const loginError = ref('')
 const isLoggingIn = ref(false)
 const isCheckingServer = ref(false)
@@ -114,6 +127,17 @@ onMounted(async () => {
   openZulipApp.value = settings.openZulipApp
   notificationSound.value = settings.notificationSound
   notificationSoundTitle.value = settings.notificationSoundTitle
+  // filters
+  notifyOnMention.value = settings.notifyOnMention ?? true
+  notifyOnPM.value = settings.notifyOnPM ?? true
+  notifyOnOther.value = settings.notifyOnOther ?? false
+  muteSelfMessages.value = settings.muteSelfMessages ?? true
+  mutedStreams.value = settings.mutedStreams || []
+  mutedTopics.value = settings.mutedTopics || []
+  // quiet hours
+  quietHoursEnabled.value = settings.quietHoursEnabled
+  quietHoursStart.value = settings.quietHoursStart || '22:00'
+  quietHoursEnd.value = settings.quietHoursEnd || '07:00'
 
   // handle android back button
   CapApp.addListener('backButton', () => {
@@ -299,8 +323,47 @@ function handleNotificationSettingChange() {
     vibrate: vibrate.value,
     openZulipApp: openZulipApp.value,
     notificationSound: notificationSound.value,
-    notificationSoundTitle: notificationSoundTitle.value
+    notificationSoundTitle: notificationSoundTitle.value,
+    // filters
+    notifyOnMention: notifyOnMention.value,
+    notifyOnPM: notifyOnPM.value,
+    notifyOnOther: notifyOnOther.value,
+    muteSelfMessages: muteSelfMessages.value,
+    mutedStreams: mutedStreams.value,
+    mutedTopics: mutedTopics.value,
+    // quiet hours
+    quietHoursEnabled: quietHoursEnabled.value,
+    quietHoursStart: quietHoursStart.value,
+    quietHoursEnd: quietHoursEnd.value
   })
+}
+
+function addMutedStream() {
+  const s = mutedStreamsInput.value.trim()
+  if (s && !mutedStreams.value.includes(s)) {
+    mutedStreams.value = [...mutedStreams.value, s]
+    mutedStreamsInput.value = ''
+    handleNotificationSettingChange()
+  }
+}
+
+function removeMutedStream(stream: string) {
+  mutedStreams.value = mutedStreams.value.filter(s => s !== stream)
+  handleNotificationSettingChange()
+}
+
+function addMutedTopic() {
+  const t = mutedTopicsInput.value.trim()
+  if (t && !mutedTopics.value.includes(t)) {
+    mutedTopics.value = [...mutedTopics.value, t]
+    mutedTopicsInput.value = ''
+    handleNotificationSettingChange()
+  }
+}
+
+function removeMutedTopic(topic: string) {
+  mutedTopics.value = mutedTopics.value.filter(t => t !== topic)
+  handleNotificationSettingChange()
 }
 
 async function handleSelectSound() {
@@ -358,15 +421,35 @@ async function handlePickSoundFile() {
 const HUMMUS_URL = 'https://archive.org/download/hummus-slack/hummus-slack.mp3'
 
 async function handleDownloadHummus() {
-  try {
-    const result = await downloadAndSetSound(HUMMUS_URL, 'hummus.mp3')
-    if (result) {
-      notificationSound.value = result.uri || null
-      notificationSoundTitle.value = result.title || 'Hummus'
-      handleNotificationSettingChange()
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const result = await downloadAndSetSound(HUMMUS_URL, 'hummus.mp3')
+      if (result) {
+        notificationSound.value = result.uri || null
+        notificationSoundTitle.value = result.title || 'Hummus'
+        handleNotificationSettingChange()
+      }
+    } catch (err) {
+      console.error('[hummus] download failed:', err)
     }
-  } catch (err) {
-    console.error('[hummus] download failed:', err)
+  } else {
+    // web: fetch and set as blob
+    try {
+      const response = await fetch(HUMMUS_URL)
+      const blob = await response.blob()
+      const file = new File([blob], 'hummus.mp3', { type: 'audio/mpeg' })
+      notificationSound.value = 'hummus.mp3'
+      notificationSoundTitle.value = 'Hummus'
+      if ('setCustomSound' in notifications) {
+        (notifications as any).setCustomSound(file)
+      }
+      // play preview
+      const audio = new Audio(URL.createObjectURL(blob))
+      audio.play()
+      handleNotificationSettingChange()
+    } catch (err) {
+      console.error('[hummus] download failed:', err)
+    }
   }
 }
 </script>
@@ -699,6 +782,34 @@ async function handleDownloadHummus() {
             <span>Open Zulip app when tapped</span>
           </label>
           <small class="setting-hint">Otherwise opens this app</small>
+        </div>
+
+        <div class="settings-divider"></div>
+
+        <div class="settings-section">
+          <h3>Filters</h3>
+
+          <label class="checkbox-field">
+            <input type="checkbox" v-model="notifyOnMention" @change="handleNotificationSettingChange">
+            <span>Notify on @mention</span>
+          </label>
+
+          <label class="checkbox-field">
+            <input type="checkbox" v-model="notifyOnPM" @change="handleNotificationSettingChange">
+            <span>Notify on PM</span>
+          </label>
+
+          <label class="checkbox-field">
+            <input type="checkbox" v-model="notifyOnOther" @change="handleNotificationSettingChange">
+            <span>Notify on other messages</span>
+          </label>
+          <small class="setting-hint">Channel messages without @mention</small>
+
+          <label class="checkbox-field">
+            <input type="checkbox" v-model="muteSelfMessages" @change="handleNotificationSettingChange">
+            <span>Mute self messages</span>
+          </label>
+          <small class="setting-hint">Don't notify on your own messages</small>
 
           <div class="sound-setting">
             <span class="sound-label">Notification sound</span>
@@ -711,15 +822,73 @@ async function handleDownloadHummus() {
               </button>
             </div>
           </div>
-          <template v-if="isNativePlatform">
-            <button class="small-btn import-btn" @click="handlePickSoundFile">
-              + Pick custom file
-            </button>
-            <small class="setting-hint">Select any audio file from storage</small>
-            <button class="small-btn hummus-btn" @click="handleDownloadHummus">
-              Hummus.
-            </button>
-          </template>
+          <button class="small-btn import-btn" v-if="isNativePlatform" @click="handlePickSoundFile">
+            + Pick custom file
+          </button>
+          <button class="small-btn hummus-btn" @click="handleDownloadHummus">
+            Hummus.
+          </button>
+          <small v-if="isNativePlatform" class="setting-hint">Select any audio file from storage</small>
+          <small v-else class="setting-hint">Custom sounds only work while the tab is open</small>
+
+          <div class="mute-list">
+            <span class="mute-label">Muted channels</span>
+            <small class="setting-hint">Zulip streams/channels to ignore</small>
+            <div class="mute-input-row">
+              <input
+                v-model="mutedStreamsInput"
+                type="text"
+                placeholder="channel name"
+                @keyup.enter="addMutedStream"
+              >
+              <button class="small-btn" @click="addMutedStream">Add</button>
+            </div>
+            <div v-if="mutedStreams.length" class="mute-tags">
+              <span v-for="s in mutedStreams" :key="s" class="mute-tag" @click="removeMutedStream(s)">
+                {{ s }} ×
+              </span>
+            </div>
+          </div>
+
+          <div class="mute-list">
+            <span class="mute-label">Muted topics (regex)</span>
+            <small class="setting-hint">Patterns to match topic names</small>
+            <div class="mute-input-row">
+              <input
+                v-model="mutedTopicsInput"
+                type="text"
+                placeholder="regex pattern"
+                @keyup.enter="addMutedTopic"
+              >
+              <button class="small-btn" @click="addMutedTopic">Add</button>
+            </div>
+            <div v-if="mutedTopics.length" class="mute-tags">
+              <span v-for="t in mutedTopics" :key="t" class="mute-tag" @click="removeMutedTopic(t)">
+                {{ t }} ×
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <h3>Quiet Hours</h3>
+
+          <label class="checkbox-field">
+            <input type="checkbox" v-model="quietHoursEnabled" @change="handleNotificationSettingChange">
+            <span>Enable quiet hours</span>
+          </label>
+          <small class="setting-hint">No notifications during this time</small>
+
+          <div v-if="quietHoursEnabled" class="quiet-hours-inputs">
+            <div class="time-input">
+              <label>From</label>
+              <input type="time" v-model="quietHoursStart" @change="handleNotificationSettingChange">
+            </div>
+            <div class="time-input">
+              <label>To</label>
+              <input type="time" v-model="quietHoursEnd" @change="handleNotificationSettingChange">
+            </div>
+          </div>
         </div>
       </div>
 

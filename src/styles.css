@@ -555,6 +555,12 @@ button.danger:hover:not(:disabled) {
   margin-bottom: 0;
 }
 
+.settings-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 8px 0 16px;
+}
+
 .settings-section h3 {
   font-size: 14px;
   font-weight: 600;
@@ -619,9 +625,92 @@ button.danger:hover:not(:disabled) {
 
 .hummus-btn {
   margin-top: 8px;
+  margin-bottom: 4px;
   width: 100%;
   justify-content: center;
   font-style: italic;
+}
+
+/* mute lists */
+.mute-list {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.mute-label {
+  display: block;
+  font-size: 14px;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.mute-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.mute-input-row input {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.mute-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.mute-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  font-size: 13px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.mute-tag:hover {
+  background: var(--error);
+  color: white;
+  border-color: var(--error);
+}
+
+/* quiet hours */
+.quiet-hours-inputs {
+  display: flex;
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.time-input {
+  flex: 1;
+}
+
+.time-input label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.time-input input {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
 }
 
 /* actions */
@@ -629,6 +718,7 @@ button.danger:hover:not(:disabled) {
   padding-top: 16px;
   position: relative;
   flex-shrink: 0;
+  margin-top: auto;
 }
 
 .actions {
