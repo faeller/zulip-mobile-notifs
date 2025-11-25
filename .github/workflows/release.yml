@@ -45,9 +45,29 @@ jobs:
       - name: Rename APK
         run: mv android/app/build/outputs/apk/release/app-release.apk android/app/build/outputs/apk/release/zulip-notifs-${{ github.ref_name }}.apk
 
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # get previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -z "$PREV_TAG" ]; then
+            # no previous tag, get all commits
+            COMMITS=$(git log --pretty=format:"- %s" --no-merges)
+          else
+            # commits between previous tag and current
+            COMMITS=$(git log --pretty=format:"- %s" --no-merges ${PREV_TAG}..HEAD)
+          fi
+          # write to file for multiline support
+          echo "$COMMITS" > changelog.txt
+          echo "commits<<EOF" >> $GITHUB_OUTPUT
+          echo "$COMMITS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           token: ${{ secrets.GH_PAT }}
           files: android/app/build/outputs/apk/release/zulip-notifs-${{ github.ref_name }}.apk
-          generate_release_notes: true
+          body: |
+            ## Changes
+            ${{ steps.changelog.outputs.commits }}

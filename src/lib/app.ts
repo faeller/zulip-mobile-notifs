@@ -4,6 +4,7 @@ import { ZulipClient } from './zulip-client.ts'
 import { storage } from './storage.ts'
 import { notifications } from './notifications.ts'
 import { startForegroundService, stopForegroundService } from './foreground-service.ts'
+import { Capacitor } from '@capacitor/core'
 
 const ACCOUNTS_KEY = 'accounts'  // array of saved accounts
 const SETTINGS_KEY = 'settings'
@@ -91,6 +92,21 @@ export class App {
       console.log('[app] keepalive changed, restarting poll')
       this.client.abortCurrentPoll()
     }
+
+    // restart native service if notification settings changed (for new channel)
+    if (Capacitor.isNativePlatform() && this.state.connectionState === 'connected') {
+      const notifSettingsChanged = settings.notificationSound !== undefined ||
+        settings.soundEveryMessage !== undefined ||
+        settings.groupByConversation !== undefined ||
+        settings.vibrate !== undefined ||
+        settings.openZulipApp !== undefined
+
+      if (notifSettingsChanged) {
+        console.log('[app] notification settings changed, restarting service')
+        await stopForegroundService()
+        await startForegroundService()
+      }
+    }
   }
 
   // save account (adds or updates existing)
@@ -162,10 +178,13 @@ export class App {
       const granted = await notifications.requestPermission()
       console.log('[app] notification permission:', granted ? 'granted' : 'denied')
 
-      // register event queue
-      console.log('[app] registering event queue...')
-      await this.client.registerQueue()
-      console.log('[app] event queue registered, starting poll loop')
+      // on native, the foreground service handles queue registration and polling
+      // on web, we need to register the queue here
+      if (!Capacitor.isNativePlatform()) {
+        console.log('[app] registering event queue...')
+        await this.client.registerQueue()
+        console.log('[app] event queue registered')
+      }
 
       this.setState({ connectionState: 'connected', lastEventTime: Date.now() })
 
@@ -177,14 +196,18 @@ export class App {
         await this.saveAccount(creds)
       }
 
-      // start foreground service on android
-      await startForegroundService()
-
-      // catch up on missed messages
-      await this.catchUpUnreadMessages()
-
-      // start polling loop
-      this.startPollLoop()
+      // on native, let the foreground service handle polling and notifications
+      // on web, we need to run the JS poll loop
+      if (Capacitor.isNativePlatform()) {
+        console.log('[app] native platform, delegating polling to foreground service')
+        await startForegroundService()
+      } else {
+        console.log('[app] web platform, starting JS poll loop')
+        // catch up on missed messages
+        await this.catchUpUnreadMessages()
+        // start polling loop
+        this.startPollLoop()
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Connection failed'
       console.error('[app] connection failed:', msg)

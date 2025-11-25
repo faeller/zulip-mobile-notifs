@@ -57,6 +57,12 @@ body {
   position: relative;
 }
 
+.screen.connected {
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+}
+
 /* onboarding */
 .onboarding {
   justify-content: flex-start;
@@ -154,8 +160,8 @@ body {
 .navbar {
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 24px 0;
+  justify-content: flex-start;
+  padding: 24px 20px;
   margin: -24px -20px 24px -20px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
@@ -168,6 +174,7 @@ body {
   gap: 14px;
   font-weight: 600;
   font-size: 20px;
+  margin-left: 4px;
 }
 
 .navbar-icon {
@@ -518,13 +525,110 @@ button.danger:hover:not(:disabled) {
   padding: 16px;
   margin-bottom: 16px;
   animation: slideDown 0.2s ease;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.settings::-webkit-scrollbar {
+  width: 6px;
+}
+
+.settings::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.settings::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+.settings::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}
+
+.settings-section {
+  margin-bottom: 20px;
+}
+
+.settings-section:last-child {
+  margin-bottom: 0;
+}
+
+.settings-section h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.setting-hint {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: -4px;
+  margin-bottom: 8px;
+  margin-left: 28px;
+}
+
+.sound-setting {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.sound-label {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.sound-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.small-btn {
+  padding: 8px 12px;
+  font-size: 13px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.small-btn:hover {
+  background: var(--surface-hover);
+}
+
+.small-btn.danger-text {
+  color: var(--error);
+}
+
+.import-btn {
+  margin-top: 16px;
+  margin-bottom: 4px;
+  width: 100%;
+  justify-content: center;
+}
+
+.hummus-btn {
+  margin-top: 8px;
+  width: 100%;
+  justify-content: center;
+  font-style: italic;
 }
 
 /* actions */
 .actions-wrapper {
-  margin-top: auto;
-  padding-top: 20px;
+  padding-top: 16px;
   position: relative;
+  flex-shrink: 0;
 }
 
 .actions {

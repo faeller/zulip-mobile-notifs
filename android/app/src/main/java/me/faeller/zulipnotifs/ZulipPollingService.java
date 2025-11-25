@@ -17,28 +17,65 @@ import androidx.work.PeriodicWorkRequest;
 import androidx.work.WorkManager;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 // foreground service that polls zulip for new messages
 public class ZulipPollingService extends Service {
     private static final String TAG = "ZulipPollingService";
     private static final String SERVICE_CHANNEL_ID = "zulip_polling_channel";
-    private static final String MESSAGE_CHANNEL_ID = "zulip_messages";
+    private static final String MESSAGE_CHANNEL_ID_PREFIX = "zulip_messages";
     private static final String MESSAGE_GROUP = "zulip_messages_group";
     private static final int SERVICE_NOTIFICATION_ID = 1;
     private static final int SUMMARY_NOTIFICATION_ID = 2;
+    private static final int NOTIF_ID_BASE = 100;
+
+    private String currentMessageChannelId = MESSAGE_CHANNEL_ID_PREFIX;
+    private String lastSoundUri = null;
 
     private volatile boolean isRunning = false;
     private Thread pollingThread;
     private ZulipClient client;
-    private int messageNotificationId = 100;
+
+    // track messages per conversation for stacking
+    // key: conversation id (sender_id for PMs, stream::topic for mentions)
+    private final Map<String, List<MessageInfo>> conversationMessages = new HashMap<>();
+    private final Map<String, Integer> conversationNotifIds = new HashMap<>();
+    private int nextNotifId = NOTIF_ID_BASE;
+
+    // simple holder for message info
+    private static class MessageInfo {
+        String senderName;
+        String body;
+        long timestamp;
+
+        MessageInfo(String senderName, String body) {
+            this.senderName = senderName;
+            this.body = body;
+            this.timestamp = System.currentTimeMillis();
+        }
+    }
+
+    // notification settings
+    private static class NotifSettings {
+        boolean soundEveryMessage = false;
+        boolean groupByConversation = true;
+        boolean vibrate = true;
+        boolean openZulipApp = true;
+        String notificationSound = null;
+    }
+
+    private NotifSettings settings = new NotifSettings();
 
     @Override
     public void onCreate() {
         super.onCreate();
         createNotificationChannels();
         schedulePeriodicRestart();
+        loadSettings();
     }
 
     // schedule workmanager to restart service every 15 min as backup
@@ -199,37 +236,142 @@ public class ZulipPollingService extends Service {
         return null;
     }
 
+    // load notification settings from shared prefs
+    private void loadSettings() {
+        try {
+            SharedPreferences prefs = getSharedPreferences(
+                "CapacitorStorage", Context.MODE_PRIVATE
+            );
+
+            String settingsJson = prefs.getString("settings", null);
+            if (settingsJson == null) return;
+
+            JSONObject json = new JSONObject(settingsJson);
+            settings.soundEveryMessage = json.optBoolean("soundEveryMessage", false);
+            settings.groupByConversation = json.optBoolean("groupByConversation", true);
+            settings.vibrate = json.optBoolean("vibrate", true);
+            settings.openZulipApp = json.optBoolean("openZulipApp", true);
+            settings.notificationSound = json.optString("notificationSound", null);
+            if ("null".equals(settings.notificationSound)) {
+                settings.notificationSound = null;
+            }
+
+            Log.d(TAG, "loaded settings: soundEvery=" + settings.soundEveryMessage +
+                ", group=" + settings.groupByConversation +
+                ", vibrate=" + settings.vibrate +
+                ", openZulip=" + settings.openZulipApp);
+        } catch (Exception e) {
+            Log.e(TAG, "failed to load settings", e);
+        }
+    }
+
     private void showMessageNotification(ZulipClient.ZulipMessage msg) {
+        // reload settings each time in case they changed
+        loadSettings();
+
         String body = msg.getPlainContent();
         if (body.length() > 300) {
             body = body.substring(0, 300) + "...";
         }
 
-        // try to open zulip mobile, fallback to our app
-        Intent intent = getPackageManager().getLaunchIntentForPackage("com.zulipmobile");
+        // conversation key: group by sender for PMs, by stream::topic for mentions
+        String convKey;
+        String convTitle;
+        if ("private".equals(msg.type)) {
+            convKey = "pm:" + msg.senderId;
+            convTitle = null; // MessagingStyle uses sender name
+        } else {
+            convKey = "stream:" + msg.stream + "::" + msg.subject;
+            convTitle = "#" + msg.stream + " > " + msg.subject;
+        }
+
+        int notifId;
+        int msgCount = 1;
+
+        if (settings.groupByConversation) {
+            // add message to conversation history
+            List<MessageInfo> messages = conversationMessages.get(convKey);
+            if (messages == null) {
+                messages = new ArrayList<>();
+                conversationMessages.put(convKey, messages);
+            }
+            messages.add(new MessageInfo(msg.senderName, body));
+            msgCount = messages.size();
+
+            // limit stored messages to avoid memory issues
+            while (messages.size() > 10) {
+                messages.remove(0);
+            }
+
+            // get or assign notification id for this conversation
+            Integer existingId = conversationNotifIds.get(convKey);
+            if (existingId == null) {
+                existingId = nextNotifId++;
+                conversationNotifIds.put(convKey, existingId);
+            }
+            notifId = existingId;
+        } else {
+            // separate notification for each message
+            notifId = nextNotifId++;
+        }
+
+        // choose which app to open
+        Intent intent = null;
+        if (settings.openZulipApp) {
+            intent = getPackageManager().getLaunchIntentForPackage("com.zulipmobile");
+            if (intent == null) {
+                // try explicit intent as fallback
+                intent = new Intent();
+                intent.setPackage("com.zulipmobile");
+                intent.setAction(Intent.ACTION_MAIN);
+                intent.addCategory(Intent.CATEGORY_LAUNCHER);
+                if (getPackageManager().resolveActivity(intent, 0) == null) {
+                    intent = null;
+                }
+            }
+        }
         if (intent == null) {
             intent = new Intent(this, MainActivity.class);
         }
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
 
         PendingIntent pendingIntent = PendingIntent.getActivity(
-            this, msg.id, intent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT
+            this, notifId, intent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT
         );
 
-        // messaging style for chat-like appearance
-        androidx.core.app.Person sender = new androidx.core.app.Person.Builder()
-            .setName(msg.senderName)
+        // build messaging style
+        androidx.core.app.Person me = new androidx.core.app.Person.Builder()
+            .setName("Me")
             .build();
 
-        NotificationCompat.MessagingStyle style = new NotificationCompat.MessagingStyle(sender)
-            .addMessage(body, System.currentTimeMillis(), sender);
-
-        // add conversation title for streams
-        if (!"private".equals(msg.type) && msg.stream != null) {
-            style.setConversationTitle("#" + msg.stream + " > " + msg.subject);
+        NotificationCompat.MessagingStyle style = new NotificationCompat.MessagingStyle(me);
+        if (convTitle != null) {
+            style.setConversationTitle(convTitle);
         }
 
-        Notification notification = new NotificationCompat.Builder(this, MESSAGE_CHANNEL_ID)
+        if (settings.groupByConversation) {
+            // add all messages in this conversation
+            List<MessageInfo> messages = conversationMessages.get(convKey);
+            if (messages != null) {
+                for (MessageInfo mi : messages) {
+                    androidx.core.app.Person sender = new androidx.core.app.Person.Builder()
+                        .setName(mi.senderName)
+                        .build();
+                    style.addMessage(mi.body, mi.timestamp, sender);
+                }
+            }
+        } else {
+            // just this message
+            androidx.core.app.Person sender = new androidx.core.app.Person.Builder()
+                .setName(msg.senderName)
+                .build();
+            style.addMessage(body, System.currentTimeMillis(), sender);
+        }
+
+        // determine if should alert (sound/vibrate)
+        boolean shouldAlert = settings.soundEveryMessage || msgCount == 1;
+
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, currentMessageChannelId)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
@@ -238,12 +380,54 @@ public class ZulipPollingService extends Service {
             .setStyle(style)
             .setColor(0xFF6492FE) // zulip blue
             .setGroup(MESSAGE_GROUP)
-            .build();
+            .setOnlyAlertOnce(!shouldAlert);
+
+        // vibration
+        if (!settings.vibrate) {
+            builder.setVibrate(new long[]{0});
+        }
+
+        // update channel with custom sound if needed (Android 8+)
+        updateMessageChannel(settings.notificationSound);
+
+        // rebuild with correct channel id
+        builder.setChannelId(currentMessageChannelId);
+
+        Notification notification = builder.build();
 
         NotificationManager manager = getSystemService(NotificationManager.class);
-        manager.notify(messageNotificationId++, notification);
+        manager.notify(notifId, notification);
 
-        Log.d(TAG, "showed notification from: " + msg.senderName);
+        // update summary notification for bundling
+        updateSummaryNotification(manager);
+
+        Log.d(TAG, "showed notification from: " + msg.senderName + " (conv: " + convKey + ", msgs: " + msgCount + ")");
+    }
+
+    // creates/updates summary notification that bundles individual messages
+    private void updateSummaryNotification(NotificationManager manager) {
+        Intent intent = getPackageManager().getLaunchIntentForPackage("com.zulipmobile");
+        if (intent == null) {
+            intent = new Intent(this, MainActivity.class);
+        }
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+
+        PendingIntent pendingIntent = PendingIntent.getActivity(
+            this, 0, intent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT
+        );
+
+        Notification summary = new NotificationCompat.Builder(this, currentMessageChannelId)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("Zulip Messages")
+            .setContentText("New messages")
+            .setGroup(MESSAGE_GROUP)
+            .setGroupSummary(true)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .setColor(0xFF6492FE)
+            .build();
+
+        manager.notify(SUMMARY_NOTIFICATION_ID, summary);
     }
 
     private Notification createServiceNotification() {
@@ -278,14 +462,62 @@ public class ZulipPollingService extends Service {
             serviceChannel.setSound(null, null);
             manager.createNotificationChannel(serviceChannel);
 
-            // message channel (with sound)
+            // create default message channel
+            updateMessageChannel(null);
+        }
+    }
+
+    // create or update message channel with custom sound
+    // android requires deleting and recreating channel to change sound
+    private void updateMessageChannel(String soundUri) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationManager manager = getSystemService(NotificationManager.class);
+
+            // check if sound changed
+            String newChannelId;
+            if (soundUri == null || soundUri.isEmpty()) {
+                newChannelId = MESSAGE_CHANNEL_ID_PREFIX;
+            } else {
+                // use hash of uri to create unique channel id
+                newChannelId = MESSAGE_CHANNEL_ID_PREFIX + "_" + Math.abs(soundUri.hashCode());
+            }
+
+            // skip if channel already exists with same sound
+            if (newChannelId.equals(currentMessageChannelId) &&
+                ((soundUri == null && lastSoundUri == null) ||
+                 (soundUri != null && soundUri.equals(lastSoundUri)))) {
+                return;
+            }
+
+            // delete old custom channel if different
+            if (!currentMessageChannelId.equals(MESSAGE_CHANNEL_ID_PREFIX)) {
+                manager.deleteNotificationChannel(currentMessageChannelId);
+            }
+
+            // create new channel
             NotificationChannel messageChannel = new NotificationChannel(
-                MESSAGE_CHANNEL_ID,
-                "Zulip Messages",
+                newChannelId,
+                soundUri != null ? "Zulip Messages (Custom)" : "Zulip Messages",
                 NotificationManager.IMPORTANCE_HIGH
             );
             messageChannel.setDescription("New message notifications");
+
+            if (soundUri != null && !soundUri.isEmpty()) {
+                try {
+                    android.media.AudioAttributes audioAttr = new android.media.AudioAttributes.Builder()
+                        .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION)
+                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build();
+                    messageChannel.setSound(android.net.Uri.parse(soundUri), audioAttr);
+                    Log.d(TAG, "created channel with custom sound: " + soundUri);
+                } catch (Exception e) {
+                    Log.e(TAG, "failed to set channel sound", e);
+                }
+            }
+
             manager.createNotificationChannel(messageChannel);
+            currentMessageChannelId = newChannelId;
+            lastSoundUri = soundUri;
         }
     }
 }

@@ -7,6 +7,9 @@ const isNative = Capacitor.isNativePlatform()
 
 // browser notification api implementation
 class BrowserNotifications implements NotificationService {
+  private audioElement: HTMLAudioElement | null = null
+  private customSoundUrl: string | null = null
+
   isSupported(): boolean {
     return 'Notification' in window
   }
@@ -21,6 +24,30 @@ class BrowserNotifications implements NotificationService {
     return result === 'granted'
   }
 
+  // set custom sound from file (web only)
+  setCustomSound(file: File | null): void {
+    if (this.customSoundUrl) {
+      URL.revokeObjectURL(this.customSoundUrl)
+      this.customSoundUrl = null
+    }
+    if (file) {
+      this.customSoundUrl = URL.createObjectURL(file)
+      // preload audio
+      this.audioElement = new Audio(this.customSoundUrl)
+      this.audioElement.load()
+    } else {
+      this.audioElement = null
+    }
+  }
+
+  private playSound(): void {
+    if (this.audioElement) {
+      // clone and play to allow overlapping
+      const sound = this.audioElement.cloneNode() as HTMLAudioElement
+      sound.play().catch(() => {})
+    }
+  }
+
   async showNotification(title: string, body: string, tag?: string): Promise<void> {
     if (!this.isSupported()) return
     if (Notification.permission !== 'granted') return
@@ -30,8 +57,12 @@ class BrowserNotifications implements NotificationService {
       tag,
       icon: './icon.svg',
       badge: './icon.svg',
-      requireInteraction: false
+      requireInteraction: false,
+      silent: !!this.audioElement // silence browser sound if we have custom
     })
+
+    // play custom sound
+    this.playSound()
   }
 }
 

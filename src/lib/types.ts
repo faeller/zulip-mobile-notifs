@@ -65,10 +65,23 @@ export type AnyZulipEvent = MessageEvent | HeartbeatEvent | ZulipEvent
 // app settings (persisted)
 export interface AppSettings {
   keepaliveSec: number // long-poll keepalive interval in seconds
+  // notification settings
+  soundEveryMessage: boolean // true = sound on every msg, false = only first in conversation
+  groupByConversation: boolean // true = stack msgs per conversation, false = separate notifs
+  vibrate: boolean // vibrate on notification
+  openZulipApp: boolean // true = open zulip mobile app, false = open our app
+  notificationSound: string | null // custom sound uri, null = default
+  notificationSoundTitle: string | null // display name for custom sound
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
-  keepaliveSec: 90 // 90s is reasonable - low overhead, quick-ish dead connection detection
+  keepaliveSec: 90,
+  soundEveryMessage: false,
+  groupByConversation: true,
+  vibrate: true,
+  openZulipApp: true,
+  notificationSound: null,
+  notificationSoundTitle: null
 }
 
 // app state
