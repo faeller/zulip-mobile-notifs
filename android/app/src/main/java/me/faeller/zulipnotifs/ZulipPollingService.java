@@ -25,7 +25,9 @@ public class ZulipPollingService extends Service {
     private static final String TAG = "ZulipPollingService";
     private static final String SERVICE_CHANNEL_ID = "zulip_polling_channel";
     private static final String MESSAGE_CHANNEL_ID = "zulip_messages";
+    private static final String MESSAGE_GROUP = "zulip_messages_group";
     private static final int SERVICE_NOTIFICATION_ID = 1;
+    private static final int SUMMARY_NOTIFICATION_ID = 2;
 
     private volatile boolean isRunning = false;
     private Thread pollingThread;
@@ -60,8 +62,10 @@ public class ZulipPollingService extends Service {
         startForeground(SERVICE_NOTIFICATION_ID, notification);
 
         // start polling if not already running
-        if (!isRunning) {
+        if (!isRunning && (pollingThread == null || !pollingThread.isAlive())) {
             startPolling();
+        } else {
+            Log.d(TAG, "polling already running, skipping");
         }
 
         return START_STICKY;
@@ -196,32 +200,50 @@ public class ZulipPollingService extends Service {
     }
 
     private void showMessageNotification(ZulipClient.ZulipMessage msg) {
-        String title = msg.getNotificationTitle();
         String body = msg.getPlainContent();
-        if (body.length() > 200) {
-            body = body.substring(0, 200) + "...";
+        if (body.length() > 300) {
+            body = body.substring(0, 300) + "...";
         }
 
-        Intent intent = new Intent(this, MainActivity.class);
+        // try to open zulip mobile, fallback to our app
+        Intent intent = getPackageManager().getLaunchIntentForPackage("com.zulipmobile");
+        if (intent == null) {
+            intent = new Intent(this, MainActivity.class);
+        }
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+
         PendingIntent pendingIntent = PendingIntent.getActivity(
-            this, 0, intent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT
+            this, msg.id, intent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT
         );
 
+        // messaging style for chat-like appearance
+        androidx.core.app.Person sender = new androidx.core.app.Person.Builder()
+            .setName(msg.senderName)
+            .build();
+
+        NotificationCompat.MessagingStyle style = new NotificationCompat.MessagingStyle(sender)
+            .addMessage(body, System.currentTimeMillis(), sender);
+
+        // add conversation title for streams
+        if (!"private".equals(msg.type) && msg.stream != null) {
+            style.setConversationTitle("#" + msg.stream + " > " + msg.subject);
+        }
+
         Notification notification = new NotificationCompat.Builder(this, MESSAGE_CHANNEL_ID)
-            .setContentTitle(title)
-            .setContentText(body)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
-            .setStyle(new NotificationCompat.BigTextStyle().bigText(body))
+            .setStyle(style)
+            .setColor(0xFF6492FE) // zulip blue
+            .setGroup(MESSAGE_GROUP)
             .build();
 
         NotificationManager manager = getSystemService(NotificationManager.class);
         manager.notify(messageNotificationId++, notification);
 
-        Log.d(TAG, "showed notification: " + title);
+        Log.d(TAG, "showed notification from: " + msg.senderName);
     }
 
     private Notification createServiceNotification() {
