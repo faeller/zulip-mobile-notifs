@@ -3,6 +3,7 @@ import { DEFAULT_SETTINGS } from './types.ts'
 import { ZulipClient } from './zulip-client.ts'
 import { storage } from './storage.ts'
 import { notifications } from './notifications.ts'
+import { startForegroundService, stopForegroundService } from './foreground-service.ts'
 
 const CREDENTIALS_KEY = 'credentials'
 const SETTINGS_KEY = 'settings'
@@ -111,6 +112,9 @@ export class App {
 
       this.setState({ connectionState: 'connected', lastEventTime: Date.now() })
 
+      // start foreground service on android
+      await startForegroundService()
+
       // start polling loop
       this.startPollLoop()
     } catch (err) {
@@ -125,6 +129,9 @@ export class App {
   async disconnect(): Promise<void> {
     console.log('[app] disconnecting...')
     this.pollLoopActive = false
+
+    // stop foreground service
+    await stopForegroundService()
 
     if (this.client) {
       await this.client.disconnect()

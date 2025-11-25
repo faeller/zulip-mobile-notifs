@@ -1,5 +1,19 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
-  <rect width="64" height="64" rx="14" fill="#6366f1"/>
-  <path d="M18 22h28v4H18zM18 30h20v4H18zM18 38h24v4H18z" fill="white" opacity="0.9"/>
-  <circle cx="48" cy="18" r="8" fill="#22c55e"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 773.12 773.12">
+  <linearGradient id="a" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#50adff"/>
+    <stop offset="1" stop-color="#7877fc"/>
+  </linearGradient>
+
+  <!-- zulip circle background -->
+  <circle cx="386.56" cy="386.56" r="386.56" fill="url(#a)"/>
+
+  <!-- zulip arrows -->
+  <path d="M566.66 527.25c0 33.03-24.23 60.05-53.84 60.05H260.29c-29.61 0-53.84-27.02-53.84-60.05 0-20.22 9.09-38.2 22.93-49.09l134.37-120c2.5-2.14 5.74 1.31 3.94 4.19l-49.29 98.69c-1.38 2.76.41 6.16 3.25 6.16h191.18c29.61 0 53.83 27.03 53.83 60.05zm0-281.39c0 20.22-9.09 38.2-22.93 49.09l-134.37 120c-2.5 2.14-5.74-1.31-3.94-4.19l49.29-98.69c1.38-2.76-.41-6.16-3.25-6.16H260.29c-29.61 0-53.84-27.02-53.84-60.05s24.23-60.05 53.84-60.05h252.54c29.61 0 53.83 27.02 53.83 60.05z" fill="#fff"/>
+
+  <!-- notification badge -->
+  <circle cx="630" cy="630" r="120" fill="#e53935"/>
+  <g transform="translate(630,630)" fill="#fff">
+    <!-- bell with clapper moved up -->
+    <path d="M0-55a35 35 0 0 0-35 35v20l-10 10v10h90v-10l-10-10v-20a35 35 0 0 0-35-35zm0 90a15 15 0 0 1-15-15h30a15 15 0 0 1-15 15z"/>
+  </g>
 </svg>
