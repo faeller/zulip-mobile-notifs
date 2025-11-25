@@ -2,3 +2,11 @@ node_modules
 dist
 .DS_Store
 *.local
+
+# android build artifacts (keep source, ignore build outputs)
+android/app/build
+android/.gradle
+android/build
+android/local.properties
+*.apk
+*.aab

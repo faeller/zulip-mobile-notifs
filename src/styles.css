@@ -204,24 +204,25 @@ footer {
   color: var(--text-muted);
 }
 
-footer p {
-  margin-bottom: 0.5rem;
-}
-
 footer a {
-  color: var(--primary);
+  color: var(--text-muted);
   text-decoration: none;
+  transition: color 0.15s;
 }
 
 footer a:hover {
-  text-decoration: underline;
+  color: var(--text);
 }
 
-.warning {
-  background: rgba(245, 158, 11, 0.1);
-  border: 1px solid var(--warning);
-  color: var(--warning);
-  padding: 0.75rem;
-  border-radius: 8px;
+.notice {
+  color: var(--text-muted);
+  font-size: 0.75rem;
   line-height: 1.4;
+  margin-bottom: 1rem;
+}
+
+.github-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
 }

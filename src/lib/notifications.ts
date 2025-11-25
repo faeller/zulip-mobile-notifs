@@ -1,8 +1,12 @@
 import type { NotificationService } from './types.ts'
+import { Capacitor } from '@capacitor/core'
+import { LocalNotifications } from '@capacitor/local-notifications'
+
+// detect if running in capacitor native app
+const isNative = Capacitor.isNativePlatform()
 
 // browser notification api implementation
-// can be swapped for capacitor local notifications on mobile
-export class BrowserNotifications implements NotificationService {
+class BrowserNotifications implements NotificationService {
   isSupported(): boolean {
     return 'Notification' in window
   }
@@ -21,7 +25,6 @@ export class BrowserNotifications implements NotificationService {
     if (!this.isSupported()) return
     if (Notification.permission !== 'granted') return
 
-    // use tag to dedupe notifications from same sender
     new Notification(title, {
       body,
       tag,
@@ -32,5 +35,34 @@ export class BrowserNotifications implements NotificationService {
   }
 }
 
-// singleton
-export const notifications = new BrowserNotifications()
+// native (capacitor) notification implementation
+class NativeNotifications implements NotificationService {
+  private notificationId = 1
+
+  isSupported(): boolean {
+    return true
+  }
+
+  async requestPermission(): Promise<boolean> {
+    const result = await LocalNotifications.requestPermissions()
+    return result.display === 'granted'
+  }
+
+  async showNotification(title: string, body: string, _tag?: string): Promise<void> {
+    await LocalNotifications.schedule({
+      notifications: [{
+        id: this.notificationId++,
+        title,
+        body,
+        smallIcon: 'ic_stat_icon',
+        largeIcon: 'ic_launcher',
+        sound: 'default'
+      }]
+    })
+  }
+}
+
+// auto-select implementation based on platform
+export const notifications: NotificationService = isNative
+  ? new NativeNotifications()
+  : new BrowserNotifications()
