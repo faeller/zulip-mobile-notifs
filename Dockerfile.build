@@ -1,0 +1,40 @@
+FROM eclipse-temurin:21-jdk
+
+# install android sdk
+ENV ANDROID_SDK_ROOT=/opt/android-sdk
+ENV PATH=$PATH:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools
+
+RUN apt-get update && apt-get install -y curl unzip wget && \
+    mkdir -p $ANDROID_SDK_ROOT/cmdline-tools && \
+    cd $ANDROID_SDK_ROOT/cmdline-tools && \
+    wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O tools.zip && \
+    unzip -q tools.zip && \
+    mv cmdline-tools latest && \
+    rm tools.zip && \
+    yes | sdkmanager --licenses > /dev/null 2>&1 && \
+    sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
+# install node and pnpm
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
+    npm install -g pnpm
+
+WORKDIR /app
+
+# copy project files
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install
+
+COPY . .
+
+# build web assets
+RUN pnpm build
+
+# sync capacitor
+RUN npx cap sync android
+
+# build apk
+WORKDIR /app/android
+RUN ./gradlew assembleDebug --no-daemon
+
+# output location: /app/android/app/build/outputs/apk/debug/app-debug.apk
