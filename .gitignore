@@ -11,3 +11,4 @@ android/local.properties
 *.apk
 *.aab
 md_docs/
+release.keystore
