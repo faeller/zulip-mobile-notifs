@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zulip Notifications</title>
+  <link rel="icon" type="image/svg+xml" href="./icon.svg">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Zulip Notifications</h1>
+      <p class="subtitle">Get browser notifications for Zulip messages</p>
+    </header>
+
+    <div id="error-message" class="error hidden"></div>
+
+    <form id="setup-form" class="card">
+      <h2>Setup</h2>
+
+      <div class="field">
+        <label for="server-url">Zulip Server URL</label>
+        <input
+          type="url"
+          id="server-url"
+          placeholder="https://your-org.zulipchat.com"
+          required
+        >
+      </div>
+
+      <div class="field">
+        <label for="email">Email</label>
+        <input
+          type="email"
+          id="email"
+          placeholder="you@example.com"
+          required
+        >
+      </div>
+
+      <div class="field">
+        <label for="api-key">API Key</label>
+        <input
+          type="password"
+          id="api-key"
+          placeholder="Your Zulip API key"
+          required
+        >
+        <small>
+          Find this in Zulip: Settings → Account & privacy → API key
+        </small>
+      </div>
+
+      <div class="actions">
+        <button type="submit" id="connect-btn" class="primary">Connect</button>
+        <button type="button" id="clear-creds-btn" class="secondary">Clear</button>
+      </div>
+    </form>
+
+    <div id="status-panel" class="card hidden">
+      <h2>Status</h2>
+
+      <div class="status-row">
+        <span>Connection:</span>
+        <span>
+          <span id="status-indicator" class="status-dot disconnected"></span>
+          <span id="status-text">Disconnected</span>
+        </span>
+      </div>
+
+      <div class="status-row">
+        <span>Last update:</span>
+        <span id="last-update">-</span>
+      </div>
+
+      <div class="actions">
+        <button type="button" id="disconnect-btn" class="secondary" disabled>Disconnect</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Settings</h2>
+
+      <div class="field">
+        <label for="keepalive">Connection keepalive (seconds)</label>
+        <input
+          type="number"
+          id="keepalive"
+          min="30"
+          max="300"
+          value="90"
+        >
+        <small>
+          Messages arrive instantly. This just controls how often we verify
+          the connection is still alive when idle. Higher = less overhead.
+        </small>
+      </div>
+    </div>
+
+    <footer>
+      <p class="warning">
+        ⚠️ Keep this tab open to receive notifications.
+        Your credentials are stored locally in your browser.
+      </p>
+      <p>
+        <a href="https://github.com/your-repo/zulip-notify" target="_blank">GitHub</a>
+      </p>
+    </footer>
+  </div>
+
+  <script type="module" src="./src/main.ts"></script>
+</body>
+</html>

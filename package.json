@@ -1,0 +1,18 @@
+{
+  "name": "zulip-mobile-notifs",
+  "version": "1.0.0",
+  "description": "Zulip notification bridge - polls Zulip API and delivers push notifications",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "keywords": ["zulip", "notifications", "push"],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vite": "^7.2.4"
+  }
+}
