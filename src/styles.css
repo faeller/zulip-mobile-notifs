@@ -59,10 +59,14 @@ body {
 
 /* onboarding */
 .onboarding {
-  justify-content: center;
+  justify-content: flex-start;
   align-items: center;
   text-align: center;
-  gap: 40px;
+  gap: clamp(20px, 5vh, 40px);
+  margin-top: clamp(30px, 6vh, 60px);
+  max-height: 100vh;
+  max-height: 100dvh;
+  overflow: hidden;
 }
 
 .hero {

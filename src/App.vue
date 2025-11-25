@@ -4,6 +4,7 @@ import { app } from './lib/app'
 import { pickZuliprc } from './lib/zuliprc'
 import { fetchApiKey } from './lib/auth'
 import { startSsoLogin, setupSsoListener, isSsoSupported } from './lib/sso-auth'
+import { App as CapApp } from '@capacitor/app'
 import { getServerSettings, type AuthInfo, type ExternalAuthMethod } from './lib/server-settings'
 import type { AppState, ZulipCredentials } from './lib/types'
 import PrivacyNotice from './components/PrivacyNotice.vue'
@@ -90,11 +91,29 @@ onMounted(async () => {
 
   // init keepalive after settings loaded from storage
   keepaliveSec.value = app.getState().settings.keepaliveSec
+
+  // handle android back button
+  CapApp.addListener('backButton', () => {
+    if (screen.value === 'connected') {
+      // don't navigate away from connected screen
+      return
+    }
+    if (selection.value) {
+      if (loginStep.value === 'credentials') {
+        goBackToServer()
+      } else {
+        clearSelection()
+      }
+    } else if (screen.value === 'setup') {
+      screen.value = 'onboarding'
+    }
+  })
 })
 
 onUnmounted(() => {
   unsubscribe?.()
   if (updateInterval) clearInterval(updateInterval)
+  CapApp.removeAllListeners()
 })
 
 // navigation

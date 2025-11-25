@@ -7,6 +7,8 @@ import { startForegroundService, stopForegroundService } from './foreground-serv
 
 const ACCOUNTS_KEY = 'accounts'  // array of saved accounts
 const SETTINGS_KEY = 'settings'
+const LAST_ACTIVE_KEY = 'lastActive'  // account id of last connected account
+const LAST_NOTIFIED_KEY = 'lastNotifiedMsgId'  // last message id we notified about
 
 type StateListener = (state: AppState) => void
 
@@ -25,6 +27,7 @@ export class App {
   }
   private listeners: StateListener[] = []
   private pollLoopActive = false
+  private lastNotifiedMsgId: number = 0
 
   // subscribe to state changes
   onStateChange(listener: StateListener): () => void {
@@ -40,7 +43,7 @@ export class App {
     this.listeners.forEach(l => l(this.state))
   }
 
-  // load saved accounts and settings on startup
+  // load saved accounts and settings on startup, auto-connect if last active
   async init(): Promise<void> {
     console.log('[app] initializing...')
 
@@ -56,6 +59,23 @@ export class App {
     if (savedSettings) {
       console.log('[app] loaded settings:', savedSettings)
       this.setState({ settings: { ...DEFAULT_SETTINGS, ...savedSettings } })
+    }
+
+    // load last notified message id
+    const lastNotified = await storage.get<number>(LAST_NOTIFIED_KEY)
+    if (lastNotified) {
+      this.lastNotifiedMsgId = lastNotified
+      console.log('[app] last notified msg id:', lastNotified)
+    }
+
+    // auto-connect to last active account
+    const lastActiveId = await storage.get<string>(LAST_ACTIVE_KEY)
+    if (lastActiveId && savedAccounts) {
+      const account = savedAccounts.find(a => getAccountId(a) === lastActiveId)
+      if (account) {
+        console.log('[app] auto-connecting to last active account:', account.email)
+        this.connect(account)
+      }
     }
   }
 
@@ -149,6 +169,9 @@ export class App {
 
       this.setState({ connectionState: 'connected', lastEventTime: Date.now() })
 
+      // remember last active account for auto-reconnect
+      await storage.set(LAST_ACTIVE_KEY, getAccountId(creds))
+
       // save account only after successful connection
       if (saveOnSuccess) {
         await this.saveAccount(creds)
@@ -156,6 +179,9 @@ export class App {
 
       // start foreground service on android
       await startForegroundService()
+
+      // catch up on missed messages
+      await this.catchUpUnreadMessages()
 
       // start polling loop
       this.startPollLoop()
@@ -171,6 +197,9 @@ export class App {
   async disconnect(): Promise<void> {
     console.log('[app] disconnecting...')
     this.pollLoopActive = false
+
+    // clear last active so we don't auto-reconnect
+    await storage.remove(LAST_ACTIVE_KEY)
 
     // stop foreground service
     await stopForegroundService()
@@ -337,6 +366,51 @@ export class App {
 
     // tag by sender to avoid duplicate notification spam
     notifications.showNotification(title, body, `msg-${msg.sender_id}`)
+
+    // track last notified message id
+    if (msg.id > this.lastNotifiedMsgId) {
+      this.lastNotifiedMsgId = msg.id
+      storage.set(LAST_NOTIFIED_KEY, msg.id)
+    }
+  }
+
+  // fetch unread messages and notify about any we missed
+  private async catchUpUnreadMessages(): Promise<void> {
+    if (!this.client) return
+
+    try {
+      console.log('[catch-up] fetching unread messages...')
+      const unreads = await this.client.getUnreadMessages()
+
+      // filter to only messages newer than last notified
+      const newUnreads = unreads.filter(m => m.id > this.lastNotifiedMsgId)
+      console.log('[catch-up] found', newUnreads.length, 'new unread messages')
+
+      if (newUnreads.length === 0) return
+
+      // batch into single notification if multiple
+      if (newUnreads.length > 1) {
+        const title = `${newUnreads.length} missed messages`
+        const body = newUnreads
+          .slice(0, 5)
+          .map(m => `${m.sender_full_name}: ${this.stripHtml(m.content).slice(0, 50)}`)
+          .join('\n')
+        notifications.showNotification(title, body, 'catch-up')
+      } else {
+        const m = newUnreads[0]
+        const title = m.type === 'private'
+          ? `PM from ${m.sender_full_name}`
+          : `${m.sender_full_name} mentioned you`
+        notifications.showNotification(title, this.stripHtml(m.content).slice(0, 200), 'catch-up')
+      }
+
+      // update last notified to newest
+      const maxId = Math.max(...newUnreads.map(m => m.id))
+      this.lastNotifiedMsgId = maxId
+      await storage.set(LAST_NOTIFIED_KEY, maxId)
+    } catch (err) {
+      console.warn('[catch-up] failed to fetch unreads:', err)
+    }
   }
 
   // expose current state for UI

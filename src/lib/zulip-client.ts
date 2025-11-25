@@ -159,4 +159,24 @@ export class ZulipClient {
   isConnected(): boolean {
     return this.queueId !== null
   }
+
+  // fetch unread private messages and mentions (for catch-up after reconnect)
+  async getUnreadMessages(): Promise<{ id: number; type: string; sender_full_name: string; content: string; subject?: string; display_recipient: string | ZulipUser[] }[]> {
+    const response = await this.request<{
+      result: string
+      messages: { id: number; type: string; sender_full_name: string; content: string; subject?: string; display_recipient: string | ZulipUser[]; flags: string[] }[]
+    }>('/messages', 'GET', {
+      anchor: 'newest',
+      num_before: '50',
+      num_after: '0',
+      narrow: JSON.stringify([{ operator: 'is', operand: 'unread' }])
+    })
+
+    // filter to only PMs and mentions
+    return response.messages.filter(m =>
+      m.type === 'private' ||
+      m.flags?.includes('mentioned') ||
+      m.flags?.includes('wildcard_mentioned')
+    )
+  }
 }
