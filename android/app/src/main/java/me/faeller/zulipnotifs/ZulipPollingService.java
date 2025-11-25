@@ -66,6 +66,17 @@ public class ZulipPollingService extends Service {
         boolean vibrate = true;
         boolean openZulipApp = true;
         String notificationSound = null;
+        // filters
+        boolean notifyOnMention = true;
+        boolean notifyOnPM = true;
+        boolean notifyOnOther = false;
+        boolean muteSelfMessages = true;
+        String[] mutedStreams = new String[0];
+        String[] mutedTopics = new String[0];
+        // quiet hours
+        boolean quietHoursEnabled = false;
+        String quietHoursStart = "22:00";
+        String quietHoursEnd = "07:00";
     }
 
     private NotifSettings settings = new NotifSettings();
@@ -255,19 +266,98 @@ public class ZulipPollingService extends Service {
             if ("null".equals(settings.notificationSound)) {
                 settings.notificationSound = null;
             }
-
-            Log.d(TAG, "loaded settings: soundEvery=" + settings.soundEveryMessage +
-                ", group=" + settings.groupByConversation +
-                ", vibrate=" + settings.vibrate +
-                ", openZulip=" + settings.openZulipApp);
+            // filters
+            settings.notifyOnMention = json.optBoolean("notifyOnMention", true);
+            settings.notifyOnPM = json.optBoolean("notifyOnPM", true);
+            settings.notifyOnOther = json.optBoolean("notifyOnOther", false);
+            settings.muteSelfMessages = json.optBoolean("muteSelfMessages", true);
+            // muted streams/topics
+            JSONArray mutedStreamsArr = json.optJSONArray("mutedStreams");
+            if (mutedStreamsArr != null) {
+                settings.mutedStreams = new String[mutedStreamsArr.length()];
+                for (int i = 0; i < mutedStreamsArr.length(); i++) {
+                    settings.mutedStreams[i] = mutedStreamsArr.optString(i);
+                }
+            }
+            JSONArray mutedTopicsArr = json.optJSONArray("mutedTopics");
+            if (mutedTopicsArr != null) {
+                settings.mutedTopics = new String[mutedTopicsArr.length()];
+                for (int i = 0; i < mutedTopicsArr.length(); i++) {
+                    settings.mutedTopics[i] = mutedTopicsArr.optString(i);
+                }
+            }
+            // quiet hours
+            settings.quietHoursEnabled = json.optBoolean("quietHoursEnabled", false);
+            settings.quietHoursStart = json.optString("quietHoursStart", "22:00");
+            settings.quietHoursEnd = json.optString("quietHoursEnd", "07:00");
         } catch (Exception e) {
             Log.e(TAG, "failed to load settings", e);
+        }
+    }
+
+    // check if notification should be shown based on filters
+    private boolean shouldShowNotification(ZulipClient.ZulipMessage msg) {
+        if (settings.muteSelfMessages && client != null && msg.senderId == client.getUserId()) return false;
+        if (settings.quietHoursEnabled && isQuietHours()) return false;
+
+        boolean isPM = "private".equals(msg.type);
+        boolean isMention = msg.mentioned || msg.wildcardMentioned;
+
+        if (isPM) return settings.notifyOnPM;
+
+        // stream message
+        if (isMention && !settings.notifyOnMention) return false;
+        if (!isMention && !settings.notifyOnOther) return false;
+
+        // check muted channels
+        if (msg.stream != null) {
+            for (String muted : settings.mutedStreams) {
+                if (muted.equalsIgnoreCase(msg.stream)) return false;
+            }
+        }
+
+        // check muted topics (regex)
+        if (msg.subject != null) {
+            for (String pattern : settings.mutedTopics) {
+                try {
+                    if (msg.subject.matches("(?i).*" + pattern + ".*")) return false;
+                } catch (Exception e) {
+                    if (msg.subject.toLowerCase().contains(pattern.toLowerCase())) return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    // check if current time is within quiet hours
+    private boolean isQuietHours() {
+        try {
+            java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("HH:mm");
+            java.util.Date now = sdf.parse(sdf.format(new java.util.Date()));
+            java.util.Date start = sdf.parse(settings.quietHoursStart);
+            java.util.Date end = sdf.parse(settings.quietHoursEnd);
+
+            // handle overnight quiet hours (e.g., 22:00 to 07:00)
+            if (start.after(end)) {
+                // quiet hours span midnight
+                return now.after(start) || now.before(end);
+            } else {
+                return now.after(start) && now.before(end);
+            }
+        } catch (Exception e) {
+            return false;
         }
     }
 
     private void showMessageNotification(ZulipClient.ZulipMessage msg) {
         // reload settings each time in case they changed
         loadSettings();
+
+        // apply filters
+        if (!shouldShowNotification(msg)) {
+            return;
+        }
 
         String body = msg.getPlainContent();
         if (body.length() > 300) {
