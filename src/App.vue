@@ -4,8 +4,11 @@ import { app } from './lib/app'
 import { pickZuliprc } from './lib/zuliprc'
 import { fetchApiKey } from './lib/auth'
 import { startSsoLogin, setupSsoListener, isSsoSupported } from './lib/sso-auth'
+import { pickNotificationSound, pickSoundFile, downloadAndSetSound } from './lib/foreground-service'
 import { App as CapApp } from '@capacitor/app'
+import { Capacitor } from '@capacitor/core'
 import { getServerSettings, type AuthInfo, type ExternalAuthMethod } from './lib/server-settings'
+import { notifications } from './lib/notifications'
 import type { AppState, ZulipCredentials } from './lib/types'
 import PrivacyNotice from './components/PrivacyNotice.vue'
 import BackButton from './components/BackButton.vue'
@@ -38,7 +41,12 @@ const password = ref('')
 const apiKey = ref('')
 const rememberDetails = ref(true)
 const showSettings = ref(true)
-const keepaliveSec = ref(90)
+const soundEveryMessage = ref(false)
+const groupByConversation = ref(true)
+const vibrate = ref(true)
+const openZulipApp = ref(true)
+const notificationSound = ref<string | null>(null)
+const notificationSoundTitle = ref<string | null>(null)
 const loginError = ref('')
 const isLoggingIn = ref(false)
 const isCheckingServer = ref(false)
@@ -48,6 +56,7 @@ const confirmingLogout = ref(false)
 const isConnecting = computed(() => state.value.connectionState === 'connecting')
 const isBusy = computed(() => isConnecting.value || isLoggingIn.value || isCheckingServer.value)
 const canUseSso = computed(() => isSsoSupported())
+const isNativePlatform = computed(() => Capacitor.isNativePlatform())
 
 const statusLabel = computed(() => {
   switch (state.value.connectionState) {
@@ -64,6 +73,14 @@ const lastUpdateText = computed(() => {
   if (ago < 5) return 'just now'
   if (ago < 60) return `${ago}s ago`
   return `${Math.floor(ago / 60)}m ago`
+})
+
+const soundDisplayName = computed(() => {
+  if (!notificationSound.value) return 'Default'
+  if (notificationSoundTitle.value) return notificationSoundTitle.value
+  // fallback: extract filename from path
+  const name = notificationSound.value.split('/').pop() || notificationSound.value
+  return name.replace(/^notification_sound_/, '').replace(/_/g, ' ')
 })
 
 // subscribe to app state
@@ -89,8 +106,14 @@ onMounted(async () => {
   await app.init()
   setupSsoListener()
 
-  // init keepalive after settings loaded from storage
-  keepaliveSec.value = app.getState().settings.keepaliveSec
+  // init settings after loaded from storage
+  const settings = app.getState().settings
+  soundEveryMessage.value = settings.soundEveryMessage
+  groupByConversation.value = settings.groupByConversation
+  vibrate.value = settings.vibrate
+  openZulipApp.value = settings.openZulipApp
+  notificationSound.value = settings.notificationSound
+  notificationSoundTitle.value = settings.notificationSoundTitle
 
   // handle android back button
   CapApp.addListener('backButton', () => {
@@ -269,10 +292,81 @@ function cancelLogout() {
   confirmingLogout.value = false
 }
 
-function handleKeepaliveChange() {
-  const val = keepaliveSec.value
-  if (val >= 30 && val <= 300) {
-    app.setSettings({ keepaliveSec: val })
+function handleNotificationSettingChange() {
+  app.setSettings({
+    soundEveryMessage: soundEveryMessage.value,
+    groupByConversation: groupByConversation.value,
+    vibrate: vibrate.value,
+    openZulipApp: openZulipApp.value,
+    notificationSound: notificationSound.value,
+    notificationSoundTitle: notificationSoundTitle.value
+  })
+}
+
+async function handleSelectSound() {
+  if (Capacitor.isNativePlatform()) {
+    // use system ringtone picker on android
+    const result = await pickNotificationSound(notificationSound.value || undefined)
+    if (result) {
+      notificationSound.value = result.uri || null
+      notificationSoundTitle.value = result.title || null
+      console.log('[sound] selected:', result.uri, result.title)
+      handleNotificationSettingChange()
+    }
+  } else {
+    // file picker for web
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'audio/*'
+
+    input.onchange = async () => {
+      const file = input.files?.[0]
+      if (!file) return
+
+      notificationSound.value = file.name
+      notificationSoundTitle.value = file.name
+      // pass file to browser notifications for audio playback
+      if ('setCustomSound' in notifications) {
+        (notifications as any).setCustomSound(file)
+      }
+      handleNotificationSettingChange()
+    }
+    input.click()
+  }
+}
+
+async function clearCustomSound() {
+  // clear web audio
+  if ('setCustomSound' in notifications) {
+    (notifications as any).setCustomSound(null)
+  }
+  notificationSound.value = null
+  notificationSoundTitle.value = null
+  handleNotificationSettingChange()
+}
+
+async function handlePickSoundFile() {
+  const result = await pickSoundFile()
+  if (result) {
+    notificationSound.value = result.uri || null
+    notificationSoundTitle.value = result.title || null
+    console.log('[sound] picked file:', result.uri, result.title)
+    handleNotificationSettingChange()
+  }
+}
+
+const HUMMUS_URL = 'https://archive.org/download/hummus-slack/hummus-slack.mp3'
+
+async function handleDownloadHummus() {
+  try {
+    const result = await downloadAndSetSound(HUMMUS_URL, 'hummus.mp3')
+    if (result) {
+      notificationSound.value = result.uri || null
+      notificationSoundTitle.value = result.title || 'Hummus'
+      handleNotificationSettingChange()
+    }
+  } catch (err) {
+    console.error('[hummus] download failed:', err)
   }
 }
 </script>
@@ -580,15 +674,53 @@ function handleKeepaliveChange() {
       </button>
 
       <div v-if="showSettings" class="settings">
-        <FormField label="Keepalive interval (seconds)" hint="How often to check connection when idle">
-          <input
-            v-model.number="keepaliveSec"
-            type="number"
-            min="30"
-            max="300"
-            @change="handleKeepaliveChange"
-          >
-        </FormField>
+        <div class="settings-section">
+          <h3>Notifications</h3>
+
+          <label class="checkbox-field">
+            <input type="checkbox" v-model="soundEveryMessage" @change="handleNotificationSettingChange">
+            <span>Sound on every message</span>
+          </label>
+          <small class="setting-hint">Otherwise only first message in conversation</small>
+
+          <label class="checkbox-field">
+            <input type="checkbox" v-model="groupByConversation" @change="handleNotificationSettingChange">
+            <span>Group by conversation</span>
+          </label>
+          <small class="setting-hint">Stack messages from same sender/topic</small>
+
+          <label class="checkbox-field">
+            <input type="checkbox" v-model="vibrate" @change="handleNotificationSettingChange">
+            <span>Vibrate</span>
+          </label>
+
+          <label class="checkbox-field">
+            <input type="checkbox" v-model="openZulipApp" @change="handleNotificationSettingChange">
+            <span>Open Zulip app when tapped</span>
+          </label>
+          <small class="setting-hint">Otherwise opens this app</small>
+
+          <div class="sound-setting">
+            <span class="sound-label">Notification sound</span>
+            <div class="sound-controls">
+              <button class="small-btn" @click="handleSelectSound">
+                {{ soundDisplayName }}
+              </button>
+              <button v-if="notificationSound" class="small-btn danger-text" @click="clearCustomSound">
+                Reset
+              </button>
+            </div>
+          </div>
+          <template v-if="isNativePlatform">
+            <button class="small-btn import-btn" @click="handlePickSoundFile">
+              + Pick custom file
+            </button>
+            <small class="setting-hint">Select any audio file from storage</small>
+            <button class="small-btn hummus-btn" @click="handleDownloadHummus">
+              Hummus.
+            </button>
+          </template>
+        </div>
       </div>
 
       <div class="actions-wrapper">
