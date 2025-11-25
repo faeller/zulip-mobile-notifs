@@ -1,9 +1,17 @@
 // zulip api types
 
+export type AuthMethod = 'password' | 'sso' | 'zuliprc' | 'manual'
+
 export interface ZulipCredentials {
   serverUrl: string
   email: string
   apiKey: string
+  authMethod?: AuthMethod  // how the credentials were obtained
+}
+
+// unique identifier for an account (server + email combo)
+export function getAccountId(creds: ZulipCredentials): string {
+  return `${creds.serverUrl}::${creds.email}`
 }
 
 export interface ZulipUser {
@@ -67,7 +75,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'error'
 
 export interface AppState {
-  credentials: ZulipCredentials | null
+  savedAccounts: ZulipCredentials[]  // all saved accounts
+  activeAccount: ZulipCredentials | null  // currently connected account
   connectionState: ConnectionState
   lastEventTime: number | null
   error: string | null

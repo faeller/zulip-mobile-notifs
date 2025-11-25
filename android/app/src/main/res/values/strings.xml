@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Zulip Notifs</string>
-    <string name="title_activity_main">Zulip Notifs</string>
-    <string name="package_name">com.zulipnotifs.app</string>
-    <string name="custom_url_scheme">com.zulipnotifs.app</string>
+    <string name="app_name">Zulip Notifications</string>
+    <string name="title_activity_main">Zulip Notifications</string>
+    <string name="package_name">me.faeller.zulipnotifs</string>
+    <string name="custom_url_scheme">me.faeller.zulipnotifs</string>
 </resources>

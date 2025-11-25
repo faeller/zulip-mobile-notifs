@@ -1,4 +1,4 @@
-package com.zulipnotifs.app;
+package me.faeller.zulipnotifs;
 
 import android.content.Intent;
 import android.os.Build;

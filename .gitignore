@@ -10,3 +10,4 @@ android/build
 android/local.properties
 *.apk
 *.aab
+md_docs/

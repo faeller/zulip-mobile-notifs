@@ -1,4 +1,4 @@
-package com.zulipnotifs.app;
+package me.faeller.zulipnotifs;
 
 import android.os.Bundle;
 import com.getcapacitor.BridgeActivity;

@@ -54,7 +54,7 @@ class NativeNotifications implements NotificationService {
         id: this.notificationId++,
         title,
         body,
-        smallIcon: 'ic_stat_icon',
+        smallIcon: 'ic_notification',
         largeIcon: 'ic_launcher',
         sound: 'default'
       }]

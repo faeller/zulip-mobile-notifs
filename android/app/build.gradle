@@ -1,10 +1,10 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace "com.zulipnotifs.app"
+    namespace "me.faeller.zulipnotifs"
     compileSdk rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.zulipnotifs.app"
+        applicationId "me.faeller.zulipnotifs"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

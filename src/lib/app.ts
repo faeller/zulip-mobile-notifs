@@ -1,11 +1,11 @@
 import type { ZulipCredentials, AppState, MessageEvent, AnyZulipEvent, ZulipMessage, ZulipUser, AppSettings } from './types.ts'
-import { DEFAULT_SETTINGS } from './types.ts'
+import { DEFAULT_SETTINGS, getAccountId } from './types.ts'
 import { ZulipClient } from './zulip-client.ts'
 import { storage } from './storage.ts'
 import { notifications } from './notifications.ts'
 import { startForegroundService, stopForegroundService } from './foreground-service.ts'
 
-const CREDENTIALS_KEY = 'credentials'
+const ACCOUNTS_KEY = 'accounts'  // array of saved accounts
 const SETTINGS_KEY = 'settings'
 
 type StateListener = (state: AppState) => void
@@ -14,7 +14,8 @@ type StateListener = (state: AppState) => void
 export class App {
   private client: ZulipClient | null = null
   private state: AppState = {
-    credentials: null,
+    savedAccounts: [],
+    activeAccount: null,
     connectionState: 'disconnected',
     lastEventTime: null,
     error: null,
@@ -39,16 +40,16 @@ export class App {
     this.listeners.forEach(l => l(this.state))
   }
 
-  // load saved credentials and settings on startup
+  // load saved accounts and settings on startup
   async init(): Promise<void> {
     console.log('[app] initializing...')
 
-    const savedCreds = await storage.get<ZulipCredentials>(CREDENTIALS_KEY)
-    if (savedCreds) {
-      console.log('[app] found saved credentials for', savedCreds.email)
-      this.setState({ credentials: savedCreds })
+    const savedAccounts = await storage.get<ZulipCredentials[]>(ACCOUNTS_KEY)
+    if (savedAccounts && savedAccounts.length > 0) {
+      console.log('[app] found', savedAccounts.length, 'saved account(s)')
+      this.setState({ savedAccounts })
     } else {
-      console.log('[app] no saved credentials')
+      console.log('[app] no saved accounts')
     }
 
     const savedSettings = await storage.get<AppSettings>(SETTINGS_KEY)
@@ -66,34 +67,64 @@ export class App {
     this.setState({ settings: newSettings })
   }
 
-  // save and set new credentials
-  async setCredentials(creds: ZulipCredentials): Promise<void> {
-    console.log('[app] saving credentials for', creds.email)
-    await storage.set(CREDENTIALS_KEY, creds)
-    this.setState({ credentials: creds, error: null })
+  // save account (adds or updates existing)
+  async saveAccount(creds: ZulipCredentials): Promise<void> {
+    const id = getAccountId(creds)
+    const existing = this.state.savedAccounts.findIndex(a => getAccountId(a) === id)
+
+    let newAccounts: ZulipCredentials[]
+    if (existing >= 0) {
+      // update existing account
+      console.log('[app] updating account for', creds.email)
+      newAccounts = [...this.state.savedAccounts]
+      newAccounts[existing] = creds
+    } else {
+      // add new account
+      console.log('[app] saving new account for', creds.email)
+      newAccounts = [...this.state.savedAccounts, creds]
+    }
+
+    await storage.set(ACCOUNTS_KEY, newAccounts)
+    this.setState({ savedAccounts: newAccounts, error: null })
   }
 
-  // clear stored credentials
-  async clearCredentials(): Promise<void> {
-    console.log('[app] clearing credentials')
+  // remove a specific account
+  async removeAccount(creds: ZulipCredentials): Promise<void> {
+    const id = getAccountId(creds)
+    console.log('[app] removing account for', creds.email)
+
+    // disconnect if this is the active account
+    if (this.state.activeAccount && getAccountId(this.state.activeAccount) === id) {
+      await this.disconnect()
+    }
+
+    const newAccounts = this.state.savedAccounts.filter(a => getAccountId(a) !== id)
+    await storage.set(ACCOUNTS_KEY, newAccounts)
+    this.setState({ savedAccounts: newAccounts })
+  }
+
+  // clear all stored accounts
+  async clearAllAccounts(): Promise<void> {
+    console.log('[app] clearing all accounts')
     await this.disconnect()
-    await storage.remove(CREDENTIALS_KEY)
-    this.setState({ credentials: null, userId: null, userEmail: null })
+    await storage.remove(ACCOUNTS_KEY)
+    this.setState({ savedAccounts: [], activeAccount: null, userId: null, userEmail: null })
   }
 
   // connect to zulip and start event loop
-  async connect(): Promise<void> {
-    if (!this.state.credentials) {
+  // if saveOnSuccess is true, saves the account after successful connection
+  async connect(creds: ZulipCredentials, saveOnSuccess: boolean = false): Promise<void> {
+    if (!creds) {
       console.error('[app] connect called without credentials')
       this.setState({ error: 'No credentials configured' })
       return
     }
 
-    console.log('[app] connecting to', this.state.credentials.serverUrl)
-    this.setState({ connectionState: 'connecting', error: null })
+    console.log('[app] connecting to', creds.serverUrl)
+    this.setState({ connectionState: 'connecting', error: null, activeAccount: creds })
 
     try {
-      this.client = new ZulipClient(this.state.credentials)
+      this.client = new ZulipClient(creds)
 
       // test auth first
       console.log('[app] testing authentication...')
@@ -112,6 +143,11 @@ export class App {
 
       this.setState({ connectionState: 'connected', lastEventTime: Date.now() })
 
+      // save account only after successful connection
+      if (saveOnSuccess) {
+        await this.saveAccount(creds)
+      }
+
       // start foreground service on android
       await startForegroundService()
 
@@ -120,7 +156,7 @@ export class App {
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Connection failed'
       console.error('[app] connection failed:', msg)
-      this.setState({ connectionState: 'error', error: msg })
+      this.setState({ connectionState: 'error', error: msg, activeAccount: null })
       this.client = null
     }
   }
@@ -139,7 +175,7 @@ export class App {
     }
 
     console.log('[app] disconnected')
-    this.setState({ connectionState: 'disconnected', error: null })
+    this.setState({ connectionState: 'disconnected', error: null, activeAccount: null })
   }
 
   // continuous event polling

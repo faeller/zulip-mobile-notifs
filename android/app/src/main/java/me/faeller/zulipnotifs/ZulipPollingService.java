@@ -1,4 +1,4 @@
-package com.zulipnotifs.app;
+package me.faeller.zulipnotifs;
 
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -33,9 +33,11 @@ public class ZulipPollingService extends Service {
         Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Zulip Notifications")
             .setContentText("Listening for messages...")
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
+            .setAutoCancel(false)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .build();
 
         startForeground(NOTIFICATION_ID, notification);
@@ -59,7 +61,7 @@ public class ZulipPollingService extends Service {
             NotificationChannel channel = new NotificationChannel(
                 CHANNEL_ID,
                 "Zulip Polling Service",
-                NotificationManager.IMPORTANCE_LOW
+                NotificationManager.IMPORTANCE_DEFAULT
             );
             channel.setDescription("Keeps the connection to Zulip alive");
 
