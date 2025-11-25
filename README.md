@@ -50,4 +50,4 @@ apk will be at `android/app/build/outputs/apk/debug/app-debug.apk`
 
 ## license
 
-MIT
+GPL-3.0
