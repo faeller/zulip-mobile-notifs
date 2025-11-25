@@ -72,6 +72,17 @@ export interface AppSettings {
   openZulipApp: boolean // true = open zulip mobile app, false = open our app
   notificationSound: string | null // custom sound uri, null = default
   notificationSoundTitle: string | null // display name for custom sound
+  // notification filters
+  notifyOnMention: boolean // notify on @-mentions
+  notifyOnPM: boolean // notify on private messages
+  notifyOnOther: boolean // notify on other stream messages
+  muteSelfMessages: boolean // don't notify on your own messages
+  mutedStreams: string[] // stream names to exclude
+  mutedTopics: string[] // topic patterns to exclude
+  // quiet hours
+  quietHoursEnabled: boolean
+  quietHoursStart: string // HH:MM format
+  quietHoursEnd: string // HH:MM format
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -81,7 +92,18 @@ export const DEFAULT_SETTINGS: AppSettings = {
   vibrate: true,
   openZulipApp: true,
   notificationSound: null,
-  notificationSoundTitle: null
+  notificationSoundTitle: null,
+  // filters
+  notifyOnMention: true,
+  notifyOnPM: true,
+  notifyOnOther: false,
+  muteSelfMessages: true,
+  mutedStreams: [],
+  mutedTopics: [],
+  // quiet hours
+  quietHoursEnabled: false,
+  quietHoursStart: '22:00',
+  quietHoursEnd: '07:00'
 }
 
 // app state
