@@ -69,7 +69,7 @@ const lastUpdateText = computed(() => {
 let unsubscribe: (() => void) | null = null
 let updateInterval: number | null = null
 
-onMounted(() => {
+onMounted(async () => {
   unsubscribe = app.onStateChange((newState) => {
     state.value = newState
 
@@ -79,16 +79,17 @@ onMounted(() => {
       // have saved accounts, go to setup screen
       screen.value = 'setup'
     }
-
-    keepaliveSec.value = newState.settings.keepaliveSec
   })
 
   updateInterval = window.setInterval(() => {
     state.value = { ...app.getState() }
   }, 1000)
 
-  app.init()
+  await app.init()
   setupSsoListener()
+
+  // init keepalive after settings loaded from storage
+  keepaliveSec.value = app.getState().settings.keepaliveSec
 })
 
 onUnmounted(() => {

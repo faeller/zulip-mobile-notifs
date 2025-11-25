@@ -65,6 +65,12 @@ export class App {
     console.log('[app] updating settings:', newSettings)
     await storage.set(SETTINGS_KEY, newSettings)
     this.setState({ settings: newSettings })
+
+    // if keepalive changed and we're connected, restart poll with new timeout
+    if (settings.keepaliveSec !== undefined && this.client?.isConnected()) {
+      console.log('[app] keepalive changed, restarting poll')
+      this.client.abortCurrentPoll()
+    }
   }
 
   // save account (adds or updates existing)

@@ -134,6 +134,11 @@ export class ZulipClient {
     }
   }
 
+  // abort current poll request (used when settings change)
+  abortCurrentPoll(): void {
+    this.abortController?.abort()
+  }
+
   // cleanup - delete queue and abort pending requests
   async disconnect(): Promise<void> {
     this.abortController?.abort()
