@@ -179,4 +179,50 @@ export class ZulipClient {
       m.flags?.includes('wildcard_mentioned')
     )
   }
+
+  // fetch subscribed streams/channels
+  async getSubscriptions(): Promise<{ name: string; stream_id: number; is_muted: boolean }[]> {
+    const response = await this.request<{
+      result: string
+      subscriptions: { name: string; stream_id: number; is_muted: boolean }[]
+    }>('/users/me/subscriptions')
+
+    return response.subscriptions.map(s => ({
+      name: s.name,
+      stream_id: s.stream_id,
+      is_muted: s.is_muted
+    }))
+  }
+
+  // fetch topics for a specific stream
+  async getStreamTopics(streamId: number): Promise<{ name: string; max_id: number }[]> {
+    const response = await this.request<{
+      result: string
+      topics: { name: string; max_id: number }[]
+    }>(`/users/me/${streamId}/topics`)
+
+    return response.topics || []
+  }
+
+  // fetch all topics from all subscribed channels
+  async getAllTopics(): Promise<{ stream_name: string; topic: string }[]> {
+    const subs = await this.getSubscriptions()
+    const allTopics: { stream_name: string; topic: string }[] = []
+
+    // fetch topics from each channel (limit to first 10 to avoid too many requests)
+    const channelsToFetch = subs.slice(0, 10)
+
+    await Promise.all(channelsToFetch.map(async (sub) => {
+      try {
+        const topics = await this.getStreamTopics(sub.stream_id)
+        for (const t of topics.slice(0, 20)) { // limit topics per channel
+          allTopics.push({ stream_name: sub.name, topic: t.name })
+        }
+      } catch {
+        // ignore errors for individual streams
+      }
+    }))
+
+    return allTopics
+  }
 }

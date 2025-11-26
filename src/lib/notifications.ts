@@ -1,4 +1,4 @@
-import type { NotificationService } from './types.ts'
+import type { NotificationService, NotificationOptions } from './types.ts'
 import { Capacitor } from '@capacitor/core'
 import { LocalNotifications } from '@capacitor/local-notifications'
 
@@ -48,9 +48,12 @@ class BrowserNotifications implements NotificationService {
     }
   }
 
-  async showNotification(title: string, body: string, tag?: string): Promise<void> {
+  async showNotification(title: string, body: string, tag?: string, options?: NotificationOptions): Promise<void> {
     if (!this.isSupported()) return
     if (Notification.permission !== 'granted') return
+
+    const shouldPlaySound = !options?.silent
+    const hasCustomSound = !!this.audioElement
 
     new Notification(title, {
       body,
@@ -58,11 +61,14 @@ class BrowserNotifications implements NotificationService {
       icon: './icon.svg',
       badge: './icon.svg',
       requireInteraction: false,
-      silent: !!this.audioElement // silence browser sound if we have custom
+      // silence browser if: no sound wanted OR we'll play custom sound instead
+      silent: !shouldPlaySound || hasCustomSound
     })
 
-    // play custom sound
-    this.playSound()
+    // only play custom sound if sound enabled and custom sound exists
+    if (shouldPlaySound && hasCustomSound) {
+      this.playSound()
+    }
   }
 }
 
@@ -79,7 +85,7 @@ class NativeNotifications implements NotificationService {
     return result.display === 'granted'
   }
 
-  async showNotification(title: string, body: string, _tag?: string): Promise<void> {
+  async showNotification(title: string, body: string, _tag?: string, options?: NotificationOptions): Promise<void> {
     await LocalNotifications.schedule({
       notifications: [{
         id: this.notificationId++,
@@ -87,7 +93,7 @@ class NativeNotifications implements NotificationService {
         body,
         smallIcon: 'ic_notification',
         largeIcon: 'ic_launcher',
-        sound: 'default'
+        sound: options?.silent ? undefined : 'default'
       }]
     })
   }

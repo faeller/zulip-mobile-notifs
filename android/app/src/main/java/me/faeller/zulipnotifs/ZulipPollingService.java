@@ -35,6 +35,7 @@ public class ZulipPollingService extends Service {
 
     private String currentMessageChannelId = MESSAGE_CHANNEL_ID_PREFIX;
     private String lastSoundUri = null;
+    private boolean lastPlaySounds = true;
 
     private volatile boolean isRunning = false;
     private Thread pollingThread;
@@ -64,7 +65,7 @@ public class ZulipPollingService extends Service {
 
     // notification settings
     private static class NotifSettings {
-        boolean soundEveryMessage = false;
+        boolean playSounds = true;
         boolean groupByConversation = true;
         boolean vibrate = true;
         boolean openZulipApp = true;
@@ -260,7 +261,7 @@ public class ZulipPollingService extends Service {
             if (settingsJson == null) return;
 
             JSONObject json = new JSONObject(settingsJson);
-            settings.soundEveryMessage = json.optBoolean("soundEveryMessage", false);
+            settings.playSounds = json.optBoolean("playSounds", true);
             settings.groupByConversation = json.optBoolean("groupByConversation", true);
             settings.vibrate = json.optBoolean("vibrate", true);
             settings.openZulipApp = json.optBoolean("openZulipApp", true);
@@ -343,6 +344,20 @@ public class ZulipPollingService extends Service {
     private CharSequence formatMarkdown(String text) {
         // [link text](url) -> link text
         text = text.replaceAll("\\[([^\\]]+)\\]\\([^)]+\\)", "$1");
+        // @_**name** (silent mention) -> @**name**
+        text = text.replaceAll("@_\\*\\*", "@**");
+        // remove |user_id from mentions: @**Name|123** -> @**Name**
+        text = text.replaceAll("\\|\\d+\\*\\*", "**");
+        // ```quote ... ``` fenced blocks -> "content" + newline for reply
+        text = text.replaceAll("(?s)```quote\\s*\\n?(.+?)\\s*```\\s*", "\"$1\"\n");
+        // ``` code blocks -> just content
+        text = text.replaceAll("(?s)```\\w*\\s*\\n?(.+?)\\n?```", "$1");
+        // ``quote`` inline -> "content"
+        text = text.replaceAll("``([^`]+)``", "\"$1\"");
+        // > quote prefix at start of lines -> remove
+        text = text.replaceAll("(?m)^>+\\s*", "");
+        // normalize newlines for notification display
+        text = text.replaceAll("\\n+", "\n");
 
         android.text.SpannableStringBuilder builder = new android.text.SpannableStringBuilder();
 
@@ -523,9 +538,8 @@ public class ZulipPollingService extends Service {
             style.addMessage(formatMarkdown(rawBody), now, sender);
         }
 
-        // determine if should alert (sound/vibrate)
-        // only alert on first message unless soundEveryMessage is enabled
-        boolean shouldAlert = settings.soundEveryMessage || msgCount == 1;
+        // determine if should play sound
+        boolean shouldPlaySound = settings.playSounds;
 
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, currentMessageChannelId)
             .setSmallIcon(R.drawable.ic_notification)
@@ -536,15 +550,15 @@ public class ZulipPollingService extends Service {
             .setStyle(style)
             .setColor(0xFF6492FE) // zulip blue
             .setGroup(MESSAGE_GROUP)
-            .setSilent(!shouldAlert);
+            .setSilent(!shouldPlaySound);
 
         // vibration
         if (!settings.vibrate) {
             builder.setVibrate(new long[]{0});
         }
 
-        // update channel with custom sound if needed (Android 8+)
-        updateMessageChannel(settings.notificationSound);
+        // update channel with sound settings if needed (Android 8+)
+        updateMessageChannel(settings.notificationSound, settings.playSounds);
 
         // rebuild with correct channel id
         builder.setChannelId(currentMessageChannelId);
@@ -619,27 +633,30 @@ public class ZulipPollingService extends Service {
             manager.createNotificationChannel(serviceChannel);
 
             // create default message channel
-            updateMessageChannel(null);
+            updateMessageChannel(null, true);
         }
     }
 
     // create or update message channel with custom sound
     // android requires deleting and recreating channel to change sound
-    private void updateMessageChannel(String soundUri) {
+    private void updateMessageChannel(String soundUri, boolean playSounds) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationManager manager = getSystemService(NotificationManager.class);
 
-            // check if sound changed
+            // build channel id based on sound settings
             String newChannelId;
-            if (soundUri == null || soundUri.isEmpty()) {
+            if (!playSounds) {
+                newChannelId = MESSAGE_CHANNEL_ID_PREFIX + "_silent";
+            } else if (soundUri == null || soundUri.isEmpty()) {
                 newChannelId = MESSAGE_CHANNEL_ID_PREFIX;
             } else {
                 // use hash of uri to create unique channel id
                 newChannelId = MESSAGE_CHANNEL_ID_PREFIX + "_" + Math.abs(soundUri.hashCode());
             }
 
-            // skip if channel already exists with same sound
+            // skip if channel already exists with same settings
             if (newChannelId.equals(currentMessageChannelId) &&
+                playSounds == lastPlaySounds &&
                 ((soundUri == null && lastSoundUri == null) ||
                  (soundUri != null && soundUri.equals(lastSoundUri)))) {
                 return;
@@ -651,14 +668,19 @@ public class ZulipPollingService extends Service {
             }
 
             // create new channel
+            String channelName = !playSounds ? "Zulip Messages (Silent)" :
+                (soundUri != null ? "Zulip Messages (Custom)" : "Zulip Messages");
             NotificationChannel messageChannel = new NotificationChannel(
                 newChannelId,
-                soundUri != null ? "Zulip Messages (Custom)" : "Zulip Messages",
+                channelName,
                 NotificationManager.IMPORTANCE_HIGH
             );
             messageChannel.setDescription("New message notifications");
 
-            if (soundUri != null && !soundUri.isEmpty()) {
+            if (!playSounds) {
+                // silent channel - no sound
+                messageChannel.setSound(null, null);
+            } else if (soundUri != null && !soundUri.isEmpty()) {
                 try {
                     android.media.AudioAttributes audioAttr = new android.media.AudioAttributes.Builder()
                         .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION)
@@ -674,6 +696,7 @@ public class ZulipPollingService extends Service {
             manager.createNotificationChannel(messageChannel);
             currentMessageChannelId = newChannelId;
             lastSoundUri = soundUri;
+            lastPlaySounds = playSounds;
         }
     }
 }

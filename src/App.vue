@@ -41,7 +41,7 @@ const password = ref('')
 const apiKey = ref('')
 const rememberDetails = ref(true)
 const showSettings = ref(true)
-const soundEveryMessage = ref(false)
+const playSounds = ref(true)
 const groupByConversation = ref(true)
 const vibrate = ref(true)
 const openZulipApp = ref(true)
@@ -57,6 +57,13 @@ const mutedStreams = ref<string[]>([])
 const mutedTopics = ref<string[]>([])
 const mutedStreamsInput = ref('')
 const mutedTopicsInput = ref('')
+// server-fetched mute suggestions
+const serverChannels = ref<{ name: string; is_muted: boolean }[]>([])
+const serverTopics = ref<{ stream_name: string; topic: string }[]>([])
+const loadingChannels = ref(false)
+const loadingTopics = ref(false)
+const showChannelSuggestions = ref(false)
+const showTopicSuggestions = ref(false)
 // quiet hours
 const quietHoursEnabled = ref(false)
 const quietHoursStart = ref('22:00')
@@ -122,7 +129,7 @@ onMounted(async () => {
 
   // init settings after loaded from storage
   const settings = app.getState().settings
-  soundEveryMessage.value = settings.soundEveryMessage
+  playSounds.value = settings.playSounds ?? true
   groupByConversation.value = settings.groupByConversation
   vibrate.value = settings.vibrate
   openZulipApp.value = settings.openZulipApp
@@ -320,7 +327,7 @@ function cancelLogout() {
 
 function handleNotificationSettingChange() {
   app.setSettings({
-    soundEveryMessage: soundEveryMessage.value,
+    playSounds: playSounds.value,
     groupByConversation: groupByConversation.value,
     vibrate: vibrate.value,
     openZulipApp: openZulipApp.value,
@@ -367,6 +374,45 @@ function addMutedTopic() {
 function removeMutedTopic(topic: string) {
   mutedTopics.value = mutedTopics.value.filter(t => t !== topic)
   handleNotificationSettingChange()
+}
+
+async function onChannelInputFocus() {
+  showChannelSuggestions.value = true
+  if (serverChannels.value.length === 0 && !loadingChannels.value) {
+    loadingChannels.value = true
+    try {
+      const subs = await app.fetchSubscriptions()
+      serverChannels.value = subs.map(s => ({ name: s.name, is_muted: s.is_muted }))
+    } finally {
+      loadingChannels.value = false
+    }
+  }
+}
+
+async function onTopicInputFocus() {
+  showTopicSuggestions.value = true
+  if (serverTopics.value.length === 0 && !loadingTopics.value) {
+    loadingTopics.value = true
+    try {
+      serverTopics.value = await app.fetchAllTopics()
+    } finally {
+      loadingTopics.value = false
+    }
+  }
+}
+
+function addServerChannel(name: string) {
+  if (!mutedStreams.value.includes(name)) {
+    mutedStreams.value = [...mutedStreams.value, name]
+    handleNotificationSettingChange()
+  }
+}
+
+function addServerTopic(topic: string) {
+  if (!mutedTopics.value.includes(topic)) {
+    mutedTopics.value = [...mutedTopics.value, topic]
+    handleNotificationSettingChange()
+  }
 }
 
 async function handleSelectSound() {
@@ -764,10 +810,9 @@ async function handleDownloadHummus() {
           <h3>Notifications</h3>
 
           <label class="checkbox-field">
-            <input type="checkbox" v-model="soundEveryMessage" @change="handleNotificationSettingChange">
-            <span>Sound on every message</span>
+            <input type="checkbox" v-model="playSounds" @change="handleNotificationSettingChange">
+            <span>Play notification sounds</span>
           </label>
-          <small class="setting-hint">Otherwise only first message in conversation</small>
 
           <label class="checkbox-field">
             <input type="checkbox" v-model="groupByConversation" @change="handleNotificationSettingChange">
@@ -843,14 +888,32 @@ async function handleDownloadHummus() {
           <div class="mute-list">
             <span class="mute-label">Muted channels</span>
             <small class="setting-hint">Zulip streams/channels to ignore</small>
-            <div class="mute-input-row">
-              <input
-                v-model="mutedStreamsInput"
-                type="text"
-                placeholder="channel name"
-                @keyup.enter="addMutedStream"
-              >
-              <button class="small-btn" @click="addMutedStream">Add</button>
+            <div class="mute-input-wrapper">
+              <div class="mute-input-row">
+                <input
+                  v-model="mutedStreamsInput"
+                  type="text"
+                  placeholder="channel name"
+                  @keyup.enter="addMutedStream"
+                  @focus="onChannelInputFocus"
+                  @blur="showChannelSuggestions = false"
+                >
+                <button class="small-btn" @click="addMutedStream">Add</button>
+              </div>
+              <div v-if="showChannelSuggestions && (serverChannels.length || loadingChannels)" class="suggestions-dropdown">
+                <small v-if="loadingChannels" class="suggestion-loading">Loading...</small>
+                <div v-else class="suggestion-tags">
+                  <span
+                    v-for="c in serverChannels"
+                    :key="c.name"
+                    class="suggestion-tag"
+                    :class="{ muted: c.is_muted, added: mutedStreams.includes(c.name) }"
+                    @mousedown.prevent="addServerChannel(c.name)"
+                  >
+                    {{ c.name }}{{ c.is_muted ? ' (muted)' : '' }}
+                  </span>
+                </div>
+              </div>
             </div>
             <div v-if="mutedStreams.length" class="mute-tags">
               <span v-for="s in mutedStreams" :key="s" class="mute-tag" @click="removeMutedStream(s)">
@@ -860,16 +923,34 @@ async function handleDownloadHummus() {
           </div>
 
           <div class="mute-list">
-            <span class="mute-label">Muted topics (regex)</span>
-            <small class="setting-hint">Patterns to match topic names</small>
-            <div class="mute-input-row">
-              <input
-                v-model="mutedTopicsInput"
-                type="text"
-                placeholder="regex pattern"
-                @keyup.enter="addMutedTopic"
-              >
-              <button class="small-btn" @click="addMutedTopic">Add</button>
+            <span class="mute-label">Muted topics</span>
+            <small class="setting-hint">Text or regex pattern to match topics</small>
+            <div class="mute-input-wrapper">
+              <div class="mute-input-row">
+                <input
+                  v-model="mutedTopicsInput"
+                  type="text"
+                  placeholder="topic name or regex"
+                  @keyup.enter="addMutedTopic"
+                  @focus="onTopicInputFocus"
+                  @blur="showTopicSuggestions = false"
+                >
+                <button class="small-btn" @click="addMutedTopic">Add</button>
+              </div>
+              <div v-if="showTopicSuggestions && (serverTopics.length || loadingTopics)" class="suggestions-dropdown">
+                <small v-if="loadingTopics" class="suggestion-loading">Loading...</small>
+                <div v-else class="suggestion-tags">
+                  <span
+                    v-for="t in serverTopics"
+                    :key="`${t.stream_name}/${t.topic}`"
+                    class="suggestion-tag"
+                    :class="{ added: mutedTopics.includes(t.topic) }"
+                    @mousedown.prevent="addServerTopic(t.topic)"
+                  >
+                    {{ t.stream_name }}/{{ t.topic }}
+                  </span>
+                </div>
+              </div>
             </div>
             <div v-if="mutedTopics.length" class="mute-tags">
               <span v-for="t in mutedTopics" :key="t" class="mute-tag" @click="removeMutedTopic(t)">

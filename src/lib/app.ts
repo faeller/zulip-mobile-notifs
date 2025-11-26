@@ -96,7 +96,7 @@ export class App {
     // restart native service if notification settings changed (for new channel)
     if (Capacitor.isNativePlatform() && this.state.connectionState === 'connected') {
       const notifSettingsChanged = settings.notificationSound !== undefined ||
-        settings.soundEveryMessage !== undefined ||
+        settings.playSounds !== undefined ||
         settings.groupByConversation !== undefined ||
         settings.vibrate !== undefined ||
         settings.openZulipApp !== undefined
@@ -448,7 +448,9 @@ export class App {
     console.log('[message] showing notification:', { title, body })
 
     // tag by sender to avoid duplicate notification spam
-    notifications.showNotification(title, body, `msg-${msg.sender_id}`)
+    notifications.showNotification(title, body, `msg-${msg.sender_id}`, {
+      silent: !this.state.settings.playSounds
+    })
 
     // track last notified message id
     if (msg.id > this.lastNotifiedMsgId) {
@@ -478,13 +480,17 @@ export class App {
           .slice(0, 5)
           .map(m => `${m.sender_full_name}: ${this.stripHtml(m.content).slice(0, 50)}`)
           .join('\n')
-        notifications.showNotification(title, body, 'catch-up')
+        notifications.showNotification(title, body, 'catch-up', {
+          silent: !this.state.settings.playSounds
+        })
       } else {
         const m = newUnreads[0]
         const title = m.type === 'private'
           ? `PM from ${m.sender_full_name}`
           : `${m.sender_full_name} mentioned you`
-        notifications.showNotification(title, this.stripHtml(m.content).slice(0, 200), 'catch-up')
+        notifications.showNotification(title, this.stripHtml(m.content).slice(0, 200), 'catch-up', {
+          silent: !this.state.settings.playSounds
+        })
       }
 
       // update last notified to newest
@@ -493,6 +499,28 @@ export class App {
       await storage.set(LAST_NOTIFIED_KEY, maxId)
     } catch (err) {
       console.warn('[catch-up] failed to fetch unreads:', err)
+    }
+  }
+
+  // fetch subscribed channels from server
+  async fetchSubscriptions(): Promise<{ name: string; stream_id: number; is_muted: boolean }[]> {
+    if (!this.client) return []
+    try {
+      return await this.client.getSubscriptions()
+    } catch (err) {
+      console.error('[app] failed to fetch subscriptions:', err)
+      return []
+    }
+  }
+
+  // fetch all topics from subscribed channels
+  async fetchAllTopics(): Promise<{ stream_name: string; topic: string }[]> {
+    if (!this.client) return []
+    try {
+      return await this.client.getAllTopics()
+    } catch (err) {
+      console.error('[app] failed to fetch topics:', err)
+      return []
     }
   }
 

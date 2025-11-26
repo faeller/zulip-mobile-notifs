@@ -66,7 +66,7 @@ export type AnyZulipEvent = MessageEvent | HeartbeatEvent | ZulipEvent
 export interface AppSettings {
   keepaliveSec: number // long-poll keepalive interval in seconds
   // notification settings
-  soundEveryMessage: boolean // true = sound on every msg, false = only first in conversation
+  playSounds: boolean // play notification sounds
   groupByConversation: boolean // true = stack msgs per conversation, false = separate notifs
   vibrate: boolean // vibrate on notification
   openZulipApp: boolean // true = open zulip mobile app, false = open our app
@@ -88,7 +88,7 @@ export interface AppSettings {
 
 export const DEFAULT_SETTINGS: AppSettings = {
   keepaliveSec: 90,
-  soundEveryMessage: false,
+  playSounds: true,
   groupByConversation: true,
   vibrate: true,
   openZulipApp: true,
@@ -129,8 +129,12 @@ export interface StorageService {
   remove(key: string): Promise<void>
 }
 
+export interface NotificationOptions {
+  silent?: boolean
+}
+
 export interface NotificationService {
   requestPermission(): Promise<boolean>
   isSupported(): boolean
-  showNotification(title: string, body: string, tag?: string): Promise<void>
+  showNotification(title: string, body: string, tag?: string, options?: NotificationOptions): Promise<void>
 }
