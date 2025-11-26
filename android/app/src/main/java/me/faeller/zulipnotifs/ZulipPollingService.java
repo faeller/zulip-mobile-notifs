@@ -33,7 +33,7 @@ public class ZulipPollingService extends Service {
     private static final int SUMMARY_NOTIFICATION_ID = 2;
     private static final int NOTIF_ID_BASE = 100;
 
-    private String currentMessageChannelId = MESSAGE_CHANNEL_ID_PREFIX;
+    private String currentMessageChannelId = null; // null = not created yet
     private String lastSoundUri = null;
     private boolean lastPlaySounds = true;
 
@@ -74,7 +74,7 @@ public class ZulipPollingService extends Service {
         // filters
         boolean notifyOnMention = true;
         boolean notifyOnPM = true;
-        boolean notifyOnOther = false;
+        boolean notifyOnOther = true;
         boolean muteSelfMessages = true;
         String[] mutedStreams = new String[0];
         String[] mutedTopics = new String[0];
@@ -273,7 +273,7 @@ public class ZulipPollingService extends Service {
             // filters
             settings.notifyOnMention = json.optBoolean("notifyOnMention", true);
             settings.notifyOnPM = json.optBoolean("notifyOnPM", true);
-            settings.notifyOnOther = json.optBoolean("notifyOnOther", false);
+            settings.notifyOnOther = json.optBoolean("notifyOnOther", true);
             settings.muteSelfMessages = json.optBoolean("muteSelfMessages", true);
             // muted streams/topics
             JSONArray mutedStreamsArr = json.optJSONArray("mutedStreams");
@@ -663,7 +663,7 @@ public class ZulipPollingService extends Service {
             }
 
             // delete old custom channel if different
-            if (!currentMessageChannelId.equals(MESSAGE_CHANNEL_ID_PREFIX)) {
+            if (currentMessageChannelId != null && !currentMessageChannelId.equals(MESSAGE_CHANNEL_ID_PREFIX)) {
                 manager.deleteNotificationChannel(currentMessageChannelId);
             }
 

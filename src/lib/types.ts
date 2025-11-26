@@ -98,7 +98,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // filters
   notifyOnMention: true,
   notifyOnPM: true,
-  notifyOnOther: false,
+  notifyOnOther: true,
   muteSelfMessages: true,
   mutedStreams: [],
   mutedTopics: [],

@@ -50,19 +50,35 @@ jobs:
       - name: Generate changelog
         id: changelog
         run: |
-          # get previous tag
-          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-          if [ -z "$PREV_TAG" ]; then
-            # no previous tag, get all commits
-            COMMITS=$(git log --pretty=format:"- %s" --no-merges)
-          else
-            # commits between previous tag and current
-            COMMITS=$(git log --pretty=format:"- %s" --no-merges ${PREV_TAG}..HEAD)
-          fi
-          # write to file for multiline support
-          echo "$COMMITS" > changelog.txt
+          # get last 3 tags for changelog
+          TAGS=$(git tag --sort=-creatordate | head -4)
+          TAG_ARRAY=($TAGS)
+          CHANGELOG=""
+
+          for i in 0 1 2; do
+            CURRENT_TAG=${TAG_ARRAY[$i]:-}
+            PREV_TAG=${TAG_ARRAY[$((i+1))]:-}
+
+            if [ -z "$CURRENT_TAG" ]; then
+              break
+            fi
+
+            if [ -z "$PREV_TAG" ]; then
+              COMMITS=$(git log --pretty=format:"- %s" --no-merges $CURRENT_TAG)
+            else
+              COMMITS=$(git log --pretty=format:"- %s" --no-merges ${PREV_TAG}..${CURRENT_TAG})
+            fi
+
+            if [ -n "$COMMITS" ]; then
+              CHANGELOG="${CHANGELOG}### ${CURRENT_TAG}
+          ${COMMITS}
+
+          "
+            fi
+          done
+
           echo "commits<<EOF" >> $GITHUB_OUTPUT
-          echo "$COMMITS" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Create Release
