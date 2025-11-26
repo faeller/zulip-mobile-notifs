@@ -1,0 +1,5 @@
+• Added optional anonymous usage statistics (can be disabled)
+• Renamed PM to DM throughout the app
+• Fixed backwards compatibility for notification settings
+• Improved version management from git tags
+• Added F-Droid metadata and fastlane structure

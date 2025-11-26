@@ -1,0 +1,72 @@
+Categories:
+  - Internet
+  - Connectivity
+
+License: GPL-3.0-only
+
+AuthorName: Merle Fäller
+AuthorWebSite: https://github.com/faeller
+
+SourceCode: https://github.com/faeller/zulip-mobile-notifs
+IssueTracker: https://github.com/faeller/zulip-mobile-notifs/issues
+Changelog: https://github.com/faeller/zulip-mobile-notifs/releases
+
+AutoName: Zulip Notifications
+
+Summary: Instant push notifications for Zulip via long-polling
+
+Description: |
+  Unofficial notification app for Zulip that delivers instant push
+  notifications without relying on Google's push services.
+
+  Features:
+  * Instant notifications for DMs and @mentions
+  * Runs in background with minimal battery usage
+  * Credentials stored locally on your device
+  * Supports password, SSO, and zuliprc authentication
+  * Notification filters (mute channels, topics, quiet hours)
+  * Custom notification sounds
+  * Multi-account support
+
+  How it works:
+  Uses Zulip's event queue API with long-polling to receive messages
+  in real-time. A lightweight foreground service keeps the connection alive.
+
+  This app is not affiliated with Zulip.
+
+AntiFeatures:
+  Tracking:
+    en-US: |
+      Contains optional anonymous public usage statistics. Can be disabled
+      in Settings > Privacy. Stats are public at https://stats.faeller.me
+
+RepoType: git
+Repo: https://github.com/faeller/zulip-mobile-notifs.git
+
+Builds:
+  - versionName: 0.5.7
+    versionCode: 507
+    commit: v0.5.7
+    subdir: android/app
+    submodules: true
+    sudo:
+      - apt-get update
+      - apt-get install -y curl
+      - curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+      - apt-get install -y nodejs
+    prebuild:
+      - cd ../..
+      - npm install -g pnpm
+      - export CI=true
+      - pnpm install --frozen-lockfile
+      - pnpm build
+      - npx cap sync android
+    scanignore:
+      - android/capacitor-cordova-android-plugins
+    gradle:
+      - yes
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags
+CurrentVersion: 0.5.7
+CurrentVersionCode: 507

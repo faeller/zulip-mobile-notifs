@@ -580,6 +580,11 @@ button.danger:hover:not(:disabled) {
   margin-left: 28px;
 }
 
+.setting-hint a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
 .sound-setting {
   display: flex;
   justify-content: space-between;

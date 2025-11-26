@@ -1,0 +1,1 @@
+Initial release with full notification support, multi-account, and customizable filters.

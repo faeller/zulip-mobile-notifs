@@ -1,0 +1,15 @@
+Unofficial notification app for Zulip that delivers instant push notifications without relying on Google's push services.
+
+Features:
+• Instant notifications for DMs and @mentions
+• Runs in background with minimal battery usage
+• Credentials stored locally on your device
+• Supports password, SSO, and zuliprc authentication
+• Notification filters (mute channels, topics, quiet hours)
+• Custom notification sounds
+• Multi-account support
+
+How it works:
+Uses Zulip's event queue API with long-polling to receive messages in real-time. A lightweight foreground service keeps the connection alive.
+
+This app is not affiliated with Zulip. It's an independent project to solve unreliable push notifications on the official app.
