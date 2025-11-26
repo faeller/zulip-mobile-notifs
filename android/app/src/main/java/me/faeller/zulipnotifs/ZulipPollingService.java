@@ -46,6 +46,9 @@ public class ZulipPollingService extends Service {
     private final Map<String, Integer> conversationNotifIds = new HashMap<>();
     private int nextNotifId = NOTIF_ID_BASE;
 
+    // time gap (ms) after which a conversation bundle resets
+    private static final long BUNDLE_TIME_GAP_MS = 5 * 60 * 1000; // 5 minutes
+
     // simple holder for message info
     private static class MessageInfo {
         String senderName;
@@ -65,6 +68,7 @@ public class ZulipPollingService extends Service {
         boolean groupByConversation = true;
         boolean vibrate = true;
         boolean openZulipApp = true;
+        boolean showTimestamps = false;
         String notificationSound = null;
         // filters
         boolean notifyOnMention = true;
@@ -179,9 +183,7 @@ public class ZulipPollingService extends Service {
                     List<ZulipClient.ZulipMessage> messages = client.getEvents(30);
 
                     for (ZulipClient.ZulipMessage msg : messages) {
-                        if (msg.shouldNotify(client.getUserId())) {
-                            showMessageNotification(msg);
-                        }
+                        showMessageNotification(msg);
                     }
 
                     // small delay between polls
@@ -262,6 +264,7 @@ public class ZulipPollingService extends Service {
             settings.groupByConversation = json.optBoolean("groupByConversation", true);
             settings.vibrate = json.optBoolean("vibrate", true);
             settings.openZulipApp = json.optBoolean("openZulipApp", true);
+            settings.showTimestamps = json.optBoolean("showTimestamps", true);
             settings.notificationSound = json.optString("notificationSound", null);
             if ("null".equals(settings.notificationSound)) {
                 settings.notificationSound = null;
@@ -330,6 +333,55 @@ public class ZulipPollingService extends Service {
         return true;
     }
 
+    // format timestamp as HH:mm
+    private String formatTime(long timestamp) {
+        java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault());
+        return sdf.format(new java.util.Date(timestamp));
+    }
+
+    // format zulip markdown for notifications
+    private CharSequence formatMarkdown(String text) {
+        // [link text](url) -> link text
+        text = text.replaceAll("\\[([^\\]]+)\\]\\([^)]+\\)", "$1");
+
+        android.text.SpannableStringBuilder builder = new android.text.SpannableStringBuilder();
+
+        // combined pattern: **bold**/@**mention**/#**channel** OR *italic* OR `code`
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(
+            "([@#]?)\\*\\*([^*]+)\\*\\*|(?<!\\*)\\*([^*]+)\\*(?!\\*)|`([^`]+)`");
+        java.util.regex.Matcher matcher = pattern.matcher(text);
+
+        int lastEnd = 0;
+        while (matcher.find()) {
+            builder.append(text.substring(lastEnd, matcher.start()));
+            int start = builder.length();
+
+            if (matcher.group(2) != null) {
+                // bold match: group 1 = prefix (@/#), group 2 = content
+                String prefix = matcher.group(1);
+                String content = matcher.group(2);
+                builder.append(prefix);
+                builder.append(content);
+                builder.setSpan(new android.text.style.StyleSpan(android.graphics.Typeface.BOLD),
+                    start, builder.length(), android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+            } else if (matcher.group(3) != null) {
+                // italic match: group 3 = content
+                builder.append(matcher.group(3));
+                builder.setSpan(new android.text.style.StyleSpan(android.graphics.Typeface.ITALIC),
+                    start, builder.length(), android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+            } else if (matcher.group(4) != null) {
+                // code match: group 4 = content
+                builder.append(matcher.group(4));
+                builder.setSpan(new android.text.style.TypefaceSpan("monospace"),
+                    start, builder.length(), android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
+            lastEnd = matcher.end();
+        }
+        builder.append(text.substring(lastEnd));
+
+        return builder;
+    }
+
     // check if current time is within quiet hours
     private boolean isQuietHours() {
         try {
@@ -385,6 +437,16 @@ public class ZulipPollingService extends Service {
                 messages = new ArrayList<>();
                 conversationMessages.put(convKey, messages);
             }
+
+            // reset bundle if last message was too long ago
+            if (!messages.isEmpty()) {
+                long lastMsgTime = messages.get(messages.size() - 1).timestamp;
+                if (System.currentTimeMillis() - lastMsgTime > BUNDLE_TIME_GAP_MS) {
+                    messages.clear();
+                    Log.d(TAG, "cleared stale conversation bundle: " + convKey);
+                }
+            }
+
             messages.add(new MessageInfo(msg.senderName, body));
             msgCount = messages.size();
 
@@ -447,7 +509,8 @@ public class ZulipPollingService extends Service {
                     androidx.core.app.Person sender = new androidx.core.app.Person.Builder()
                         .setName(mi.senderName)
                         .build();
-                    style.addMessage(mi.body, mi.timestamp, sender);
+                    String rawBody = settings.showTimestamps ? formatTime(mi.timestamp) + " | " + mi.body : mi.body;
+                    style.addMessage(formatMarkdown(rawBody), mi.timestamp, sender);
                 }
             }
         } else {
@@ -455,10 +518,13 @@ public class ZulipPollingService extends Service {
             androidx.core.app.Person sender = new androidx.core.app.Person.Builder()
                 .setName(msg.senderName)
                 .build();
-            style.addMessage(body, System.currentTimeMillis(), sender);
+            long now = System.currentTimeMillis();
+            String rawBody = settings.showTimestamps ? formatTime(now) + " | " + body : body;
+            style.addMessage(formatMarkdown(rawBody), now, sender);
         }
 
         // determine if should alert (sound/vibrate)
+        // only alert on first message unless soundEveryMessage is enabled
         boolean shouldAlert = settings.soundEveryMessage || msgCount == 1;
 
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, currentMessageChannelId)
@@ -470,7 +536,7 @@ public class ZulipPollingService extends Service {
             .setStyle(style)
             .setColor(0xFF6492FE) // zulip blue
             .setGroup(MESSAGE_GROUP)
-            .setOnlyAlertOnce(!shouldAlert);
+            .setSilent(!shouldAlert);
 
         // vibration
         if (!settings.vibrate) {

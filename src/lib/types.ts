@@ -70,6 +70,7 @@ export interface AppSettings {
   groupByConversation: boolean // true = stack msgs per conversation, false = separate notifs
   vibrate: boolean // vibrate on notification
   openZulipApp: boolean // true = open zulip mobile app, false = open our app
+  showTimestamps: boolean // show time in notification messages
   notificationSound: string | null // custom sound uri, null = default
   notificationSoundTitle: string | null // display name for custom sound
   // notification filters
@@ -91,6 +92,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   groupByConversation: true,
   vibrate: true,
   openZulipApp: true,
+  showTimestamps: false,
   notificationSound: null,
   notificationSoundTitle: null,
   // filters

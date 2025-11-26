@@ -45,6 +45,7 @@ const soundEveryMessage = ref(false)
 const groupByConversation = ref(true)
 const vibrate = ref(true)
 const openZulipApp = ref(true)
+const showTimestamps = ref(false)
 const notificationSound = ref<string | null>(null)
 const notificationSoundTitle = ref<string | null>(null)
 // filters
@@ -125,6 +126,7 @@ onMounted(async () => {
   groupByConversation.value = settings.groupByConversation
   vibrate.value = settings.vibrate
   openZulipApp.value = settings.openZulipApp
+  showTimestamps.value = settings.showTimestamps
   notificationSound.value = settings.notificationSound
   notificationSoundTitle.value = settings.notificationSoundTitle
   // filters
@@ -322,6 +324,7 @@ function handleNotificationSettingChange() {
     groupByConversation: groupByConversation.value,
     vibrate: vibrate.value,
     openZulipApp: openZulipApp.value,
+    showTimestamps: showTimestamps.value,
     notificationSound: notificationSound.value,
     notificationSoundTitle: notificationSoundTitle.value,
     // filters
@@ -771,6 +774,12 @@ async function handleDownloadHummus() {
             <span>Group by conversation</span>
           </label>
           <small class="setting-hint">Stack messages from same sender/topic</small>
+
+          <label class="checkbox-field">
+            <input type="checkbox" v-model="showTimestamps" @change="handleNotificationSettingChange">
+            <span>Show timestamps</span>
+          </label>
+          <small class="setting-hint">Display time in notification messages</small>
 
           <label class="checkbox-field">
             <input type="checkbox" v-model="vibrate" @change="handleNotificationSettingChange">

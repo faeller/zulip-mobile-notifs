@@ -292,30 +292,97 @@ export class App {
     }
   }
 
-  // determine if message should trigger notification
-  // decision logic:
-  //   - PMs (direct messages): always notify
-  //   - stream messages: only if @-mentioned or wildcard (@all, @everyone)
-  //   - own messages: never notify
+  // check if current time is within quiet hours
+  private isQuietHours(): boolean {
+    if (!this.state.settings.quietHoursEnabled) return false
+
+    const now = new Date()
+    const currentMinutes = now.getHours() * 60 + now.getMinutes()
+
+    const [startH, startM] = this.state.settings.quietHoursStart.split(':').map(Number)
+    const [endH, endM] = this.state.settings.quietHoursEnd.split(':').map(Number)
+    const startMinutes = startH * 60 + startM
+    const endMinutes = endH * 60 + endM
+
+    // handle overnight quiet hours (e.g., 22:00 to 07:00)
+    if (startMinutes > endMinutes) {
+      return currentMinutes >= startMinutes || currentMinutes < endMinutes
+    }
+    return currentMinutes >= startMinutes && currentMinutes < endMinutes
+  }
+
+  // determine if message should trigger notification based on settings
   private shouldNotify(msg: ZulipMessage, flags: string[]): boolean {
-    // always notify on PMs
-    if (msg.type === 'private') {
+    const settings = this.state.settings
+
+    // skip own messages
+    if (settings.muteSelfMessages && msg.sender_id === this.state.userId) {
+      console.log('[notify] own message, skipping')
+      return false
+    }
+
+    // check quiet hours
+    if (this.isQuietHours()) {
+      console.log('[notify] quiet hours active, skipping')
+      return false
+    }
+
+    const isPM = msg.type === 'private'
+    const isMention = flags.includes('mentioned') || flags.includes('wildcard_mentioned')
+
+    // PM handling
+    if (isPM) {
+      if (!settings.notifyOnPM) {
+        console.log('[notify] PM notifications disabled, skipping')
+        return false
+      }
       console.log('[notify] PM detected -> will notify')
       return true
     }
 
-    // notify if mentioned
-    if (flags.includes('mentioned')) {
-      console.log('[notify] direct @-mention detected -> will notify')
-      return true
+    // stream message handling
+    if (isMention && !settings.notifyOnMention) {
+      console.log('[notify] mention notifications disabled, skipping')
+      return false
     }
-    if (flags.includes('wildcard_mentioned')) {
-      console.log('[notify] wildcard mention (@all etc) -> will notify')
-      return true
+    if (!isMention && !settings.notifyOnOther) {
+      console.log('[notify] other channel notifications disabled, skipping')
+      return false
     }
 
-    console.log('[notify] stream message without mention -> skip')
-    return false
+    // check muted channels
+    const streamName = typeof msg.display_recipient === 'string' ? msg.display_recipient : null
+    if (streamName && settings.mutedStreams.length > 0) {
+      const isMuted = settings.mutedStreams.some(
+        muted => muted.toLowerCase() === streamName.toLowerCase()
+      )
+      if (isMuted) {
+        console.log('[notify] channel is muted, skipping')
+        return false
+      }
+    }
+
+    // check muted topics (regex patterns)
+    if (msg.subject && settings.mutedTopics.length > 0) {
+      for (const pattern of settings.mutedTopics) {
+        try {
+          const regex = new RegExp(pattern, 'i')
+          if (regex.test(msg.subject)) {
+            console.log('[notify] topic matches muted pattern, skipping')
+            return false
+          }
+        } catch {
+          // fallback to simple contains check if regex invalid
+          if (msg.subject.toLowerCase().includes(pattern.toLowerCase())) {
+            console.log('[notify] topic contains muted string, skipping')
+            return false
+          }
+        }
+      }
+    }
+
+    console.log('[notify] passed all filters -> will notify')
+    return true
   }
 
   // format notification content from message
@@ -371,13 +438,6 @@ export class App {
       flags: flags,
       content_preview: msg.content.slice(0, 100)
     })
-
-    // TODO: uncomment after testing
-    // // don't notify on own messages
-    // if (msg.sender_id === this.state.userId) {
-    //   console.log('[message] from self, skipping')
-    //   return
-    // }
 
     // check if we should notify
     if (!this.shouldNotify(msg, flags)) {

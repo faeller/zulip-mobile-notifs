@@ -210,19 +210,6 @@ public class ZulipClient {
         public boolean mentioned;
         public boolean wildcardMentioned;
 
-        // should we notify about this message?
-        public boolean shouldNotify(int myUserId) {
-            // TODO: uncomment after testing
-            // skip own messages
-            // if (senderId == myUserId) return false;
-
-            // always notify on PMs
-            if ("private".equals(type)) return true;
-
-            // notify on mentions
-            return mentioned || wildcardMentioned;
-        }
-
         // format notification title
         public String getNotificationTitle() {
             if ("private".equals(type)) {
