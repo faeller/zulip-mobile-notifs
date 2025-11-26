@@ -50,7 +50,7 @@ const notificationSound = ref<string | null>(null)
 const notificationSoundTitle = ref<string | null>(null)
 // filters
 const notifyOnMention = ref(true)
-const notifyOnPM = ref(true)
+const notifyOnDM = ref(true)
 const notifyOnOther = ref(false)
 const muteSelfMessages = ref(true)
 const mutedStreams = ref<string[]>([])
@@ -68,6 +68,8 @@ const showTopicSuggestions = ref(false)
 const quietHoursEnabled = ref(false)
 const quietHoursStart = ref('22:00')
 const quietHoursEnd = ref('07:00')
+// privacy
+const analyticsEnabled = ref(true)
 const loginError = ref('')
 const isLoggingIn = ref(false)
 const isCheckingServer = ref(false)
@@ -138,7 +140,7 @@ onMounted(async () => {
   notificationSoundTitle.value = settings.notificationSoundTitle
   // filters
   notifyOnMention.value = settings.notifyOnMention ?? true
-  notifyOnPM.value = settings.notifyOnPM ?? true
+  notifyOnDM.value = settings.notifyOnDM ?? (settings as any).notifyOnPM ?? true
   notifyOnOther.value = settings.notifyOnOther ?? false
   muteSelfMessages.value = settings.muteSelfMessages ?? true
   mutedStreams.value = settings.mutedStreams || []
@@ -147,6 +149,8 @@ onMounted(async () => {
   quietHoursEnabled.value = settings.quietHoursEnabled
   quietHoursStart.value = settings.quietHoursStart || '22:00'
   quietHoursEnd.value = settings.quietHoursEnd || '07:00'
+  // privacy
+  analyticsEnabled.value = settings.analyticsEnabled ?? true
 
   // handle android back button
   CapApp.addListener('backButton', () => {
@@ -336,7 +340,7 @@ function handleNotificationSettingChange() {
     notificationSoundTitle: notificationSoundTitle.value,
     // filters
     notifyOnMention: notifyOnMention.value,
-    notifyOnPM: notifyOnPM.value,
+    notifyOnDM: notifyOnDM.value,
     notifyOnOther: notifyOnOther.value,
     muteSelfMessages: muteSelfMessages.value,
     mutedStreams: mutedStreams.value,
@@ -344,7 +348,9 @@ function handleNotificationSettingChange() {
     // quiet hours
     quietHoursEnabled: quietHoursEnabled.value,
     quietHoursStart: quietHoursStart.value,
-    quietHoursEnd: quietHoursEnd.value
+    quietHoursEnd: quietHoursEnd.value,
+    // privacy
+    analyticsEnabled: analyticsEnabled.value
   })
 }
 
@@ -519,7 +525,7 @@ async function handleDownloadHummus() {
             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
             <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
           </svg>
-          <span>Instant notifications for PMs and @mentions</span>
+          <span>Instant notifications for DMs and @mentions</span>
         </div>
         <div class="feature">
           <svg class="feature-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -849,8 +855,8 @@ async function handleDownloadHummus() {
           </label>
 
           <label class="checkbox-field">
-            <input type="checkbox" v-model="notifyOnPM" @change="handleNotificationSettingChange">
-            <span>Notify on PM</span>
+            <input type="checkbox" v-model="notifyOnDM" @change="handleNotificationSettingChange">
+            <span>Notify on DM</span>
           </label>
 
           <label class="checkbox-field">
@@ -979,6 +985,18 @@ async function handleDownloadHummus() {
               <input type="time" v-model="quietHoursEnd" @change="handleNotificationSettingChange">
             </div>
           </div>
+        </div>
+
+        <div class="settings-divider"></div>
+
+        <div class="settings-section">
+          <h3>Privacy</h3>
+
+          <label class="checkbox-field">
+            <input type="checkbox" v-model="analyticsEnabled" @change="handleNotificationSettingChange">
+            <span>Anonymous public stats collection</span>
+          </label>
+          <small class="setting-hint">Helps improve the app. No personal data collected. <a href="https://stats.faeller.me" target="_blank" class="stats-link">View stats</a></small>
         </div>
       </div>
 

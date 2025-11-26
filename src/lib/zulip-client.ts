@@ -172,7 +172,7 @@ export class ZulipClient {
       narrow: JSON.stringify([{ operator: 'is', operand: 'unread' }])
     })
 
-    // filter to only PMs and mentions
+    // filter to only DMs and mentions
     return response.messages.filter(m =>
       m.type === 'private' ||
       m.flags?.includes('mentioned') ||

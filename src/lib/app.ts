@@ -6,10 +6,25 @@ import { notifications } from './notifications.ts'
 import { startForegroundService, stopForegroundService } from './foreground-service.ts'
 import { Capacitor } from '@capacitor/core'
 
+// anonymous analytics (proxied through CF worker, no PII)
+const ANALYTICS_URL = 'https://stats.faeller.me'
+let analyticsEnabled = true // will be updated from settings
+
+function trackEvent(event: string, meta?: Record<string, string>) {
+  if (!analyticsEnabled) return
+  const platform = Capacitor.isNativePlatform() ? 'android' : 'web'
+  fetch(ANALYTICS_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ event, meta: { version: __APP_VERSION__, platform, ...meta } })
+  }).catch(() => {}) // silent fail
+}
+
 const ACCOUNTS_KEY = 'accounts'  // array of saved accounts
 const SETTINGS_KEY = 'settings'
 const LAST_ACTIVE_KEY = 'lastActive'  // account id of last connected account
 const LAST_NOTIFIED_KEY = 'lastNotifiedMsgId'  // last message id we notified about
+const INSTALL_TRACKED_KEY = 'installTracked'  // whether we've tracked install
 
 type StateListener = (state: AppState) => void
 
@@ -48,18 +63,28 @@ export class App {
   async init(): Promise<void> {
     console.log('[app] initializing...')
 
+    // load settings first (needed for analytics check)
+    const savedSettings = await storage.get<AppSettings>(SETTINGS_KEY)
+    if (savedSettings) {
+      console.log('[app] loaded settings:', savedSettings)
+      this.setState({ settings: { ...DEFAULT_SETTINGS, ...savedSettings } })
+      analyticsEnabled = savedSettings.analyticsEnabled ?? true
+    }
+
+    // track install once, then app_open
+    const installTracked = await storage.get<boolean>(INSTALL_TRACKED_KEY)
+    if (!installTracked) {
+      trackEvent('install')
+      await storage.set(INSTALL_TRACKED_KEY, true)
+    }
+    trackEvent('app_open')
+
     const savedAccounts = await storage.get<ZulipCredentials[]>(ACCOUNTS_KEY)
     if (savedAccounts && savedAccounts.length > 0) {
       console.log('[app] found', savedAccounts.length, 'saved account(s)')
       this.setState({ savedAccounts })
     } else {
       console.log('[app] no saved accounts')
-    }
-
-    const savedSettings = await storage.get<AppSettings>(SETTINGS_KEY)
-    if (savedSettings) {
-      console.log('[app] loaded settings:', savedSettings)
-      this.setState({ settings: { ...DEFAULT_SETTINGS, ...savedSettings } })
     }
 
     // load last notified message id
@@ -86,6 +111,11 @@ export class App {
     console.log('[app] updating settings:', newSettings)
     await storage.set(SETTINGS_KEY, newSettings)
     this.setState({ settings: newSettings })
+
+    // update analytics flag
+    if (settings.analyticsEnabled !== undefined) {
+      analyticsEnabled = settings.analyticsEnabled
+    }
 
     // if keepalive changed and we're connected, restart poll with new timeout
     if (settings.keepaliveSec !== undefined && this.client?.isConnected()) {
@@ -187,6 +217,7 @@ export class App {
       }
 
       this.setState({ connectionState: 'connected', lastEventTime: Date.now() })
+      trackEvent('connect', { auth: creds.authMethod || 'unknown' })
 
       // remember last active account for auto-reconnect
       await storage.set(LAST_ACTIVE_KEY, getAccountId(creds))
@@ -327,16 +358,16 @@ export class App {
       return false
     }
 
-    const isPM = msg.type === 'private'
+    const isDM = msg.type === 'private'
     const isMention = flags.includes('mentioned') || flags.includes('wildcard_mentioned')
 
-    // PM handling
-    if (isPM) {
-      if (!settings.notifyOnPM) {
-        console.log('[notify] PM notifications disabled, skipping')
+    // DM handling
+    if (isDM) {
+      if (!settings.notifyOnDM) {
+        console.log('[notify] DM notifications disabled, skipping')
         return false
       }
-      console.log('[notify] PM detected -> will notify')
+      console.log('[notify] DM detected -> will notify')
       return true
     }
 
@@ -390,7 +421,7 @@ export class App {
     const sender = msg.sender_full_name
 
     if (msg.type === 'private') {
-      // for group PMs, show all recipients
+      // for group DMs, show all recipients
       const recipients = Array.isArray(msg.display_recipient)
         ? (msg.display_recipient as ZulipUser[])
             .filter(u => u.user_id !== this.state.userId)
@@ -399,7 +430,7 @@ export class App {
         : sender
 
       return {
-        title: `PM from ${recipients.length > 30 ? sender : recipients}`,
+        title: `DM from ${recipients.length > 30 ? sender : recipients}`,
         body: this.stripHtml(msg.content).slice(0, 200)
       }
     }
@@ -486,7 +517,7 @@ export class App {
       } else {
         const m = newUnreads[0]
         const title = m.type === 'private'
-          ? `PM from ${m.sender_full_name}`
+          ? `DM from ${m.sender_full_name}`
           : `${m.sender_full_name} mentioned you`
         notifications.showNotification(title, this.stripHtml(m.content).slice(0, 200), 'catch-up', {
           silent: !this.state.settings.playSounds

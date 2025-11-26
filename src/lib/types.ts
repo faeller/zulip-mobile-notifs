@@ -75,7 +75,7 @@ export interface AppSettings {
   notificationSoundTitle: string | null // display name for custom sound
   // notification filters
   notifyOnMention: boolean // notify on @-mentions
-  notifyOnPM: boolean // notify on private messages
+  notifyOnDM: boolean // notify on direct messages
   notifyOnOther: boolean // notify on other stream messages
   muteSelfMessages: boolean // don't notify on your own messages
   mutedStreams: string[] // stream names to exclude
@@ -84,6 +84,8 @@ export interface AppSettings {
   quietHoursEnabled: boolean
   quietHoursStart: string // HH:MM format
   quietHoursEnd: string // HH:MM format
+  // privacy
+  analyticsEnabled: boolean // send anonymous usage stats
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -97,7 +99,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   notificationSoundTitle: null,
   // filters
   notifyOnMention: true,
-  notifyOnPM: true,
+  notifyOnDM: true,
   notifyOnOther: true,
   muteSelfMessages: true,
   mutedStreams: [],
@@ -105,7 +107,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // quiet hours
   quietHoursEnabled: false,
   quietHoursStart: '22:00',
-  quietHoursEnd: '07:00'
+  quietHoursEnd: '07:00',
+  // privacy
+  analyticsEnabled: true
 }
 
 // app state

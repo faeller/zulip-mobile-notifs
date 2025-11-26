@@ -1,5 +1,12 @@
 apply plugin: 'com.android.application'
 
+// read version from package.json
+def packageJson = new groovy.json.JsonSlurper().parse(file("../../package.json"))
+def appVersion = packageJson.version
+// convert semver to versionCode: 0.5.6 -> 506, 1.2.3 -> 10203
+def versionParts = appVersion.split('\\.')
+def appVersionCode = (versionParts[0].toInteger() * 10000) + (versionParts[1].toInteger() * 100) + versionParts[2].toInteger()
+
 android {
     namespace "me.faeller.zulipnotifs"
     compileSdk rootProject.ext.compileSdkVersion
@@ -7,8 +14,10 @@ android {
         applicationId "me.faeller.zulipnotifs"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode appVersionCode
+        versionName appVersion
+        // expose version to java via BuildConfig
+        buildConfigField "String", "APP_VERSION", "\"${appVersion}\""
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -17,19 +26,27 @@ android {
         }
     }
     signingConfigs {
-        release {
-            storeFile file("release.keystore")
-            storePassword System.getenv("KEYSTORE_PASSWORD")
-            keyAlias System.getenv("KEY_ALIAS")
-            keyPassword System.getenv("KEY_PASSWORD")
+        if (System.getenv("KEYSTORE_PASSWORD")) {
+            release {
+                storeFile file("release.keystore")
+                storePassword System.getenv("KEYSTORE_PASSWORD")
+                keyAlias System.getenv("KEY_ALIAS")
+                keyPassword System.getenv("KEY_PASSWORD")
+            }
         }
     }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
-            signingConfig signingConfigs.release
+            // only sign if keystore is configured (not on F-Droid)
+            if (System.getenv("KEYSTORE_PASSWORD")) {
+                signingConfig signingConfigs.release
+            }
         }
+    }
+    buildFeatures {
+        buildConfig true
     }
 }
 

@@ -42,7 +42,7 @@ public class ZulipPollingService extends Service {
     private ZulipClient client;
 
     // track messages per conversation for stacking
-    // key: conversation id (sender_id for PMs, stream::topic for mentions)
+    // key: conversation id (sender_id for DMs, stream::topic for mentions)
     private final Map<String, List<MessageInfo>> conversationMessages = new HashMap<>();
     private final Map<String, Integer> conversationNotifIds = new HashMap<>();
     private int nextNotifId = NOTIF_ID_BASE;
@@ -73,7 +73,7 @@ public class ZulipPollingService extends Service {
         String notificationSound = null;
         // filters
         boolean notifyOnMention = true;
-        boolean notifyOnPM = true;
+        boolean notifyOnDM = true;
         boolean notifyOnOther = true;
         boolean muteSelfMessages = true;
         String[] mutedStreams = new String[0];
@@ -116,6 +116,14 @@ public class ZulipPollingService extends Service {
 
         // start polling if not already running
         if (!isRunning && (pollingThread == null || !pollingThread.isAlive())) {
+            // track install once, then app_open
+            SharedPreferences prefs = getSharedPreferences("CapacitorStorage", Context.MODE_PRIVATE);
+            boolean installTracked = prefs.getBoolean("installTrackedNative", false);
+            if (!installTracked) {
+                Analytics.trackEvent(this, "install", BuildConfig.APP_VERSION, null);
+                prefs.edit().putBoolean("installTrackedNative", true).apply();
+            }
+            Analytics.trackEvent(this, "app_open", BuildConfig.APP_VERSION, null);
             startPolling();
         } else {
             Log.d(TAG, "polling already running, skipping");
@@ -140,9 +148,11 @@ public class ZulipPollingService extends Service {
 
     private void startPolling() {
         isRunning = true;
+        final Context context = this;
 
         pollingThread = new Thread(() -> {
             Log.d(TAG, "polling thread started");
+            boolean hasTrackedConnect = false;
 
             while (isRunning) {
                 try {
@@ -157,10 +167,12 @@ public class ZulipPollingService extends Service {
                     String serverUrl = creds[0];
                     String email = creds[1];
                     String apiKey = creds[2];
+                    String authMethod = creds.length > 3 ? creds[3] : "unknown";
 
                     // create client if needed
                     if (client == null) {
                         client = new ZulipClient(serverUrl, email, apiKey);
+                        hasTrackedConnect = false;
                     }
 
                     // test connection
@@ -177,6 +189,11 @@ public class ZulipPollingService extends Service {
                             Log.w(TAG, "queue registration failed, retrying...");
                             Thread.sleep(10000);
                             continue;
+                        }
+                        // track connect event once per client creation
+                        if (!hasTrackedConnect) {
+                            Analytics.trackEvent(context, "connect", BuildConfig.APP_VERSION, authMethod);
+                            hasTrackedConnect = true;
                         }
                     }
 
@@ -211,6 +228,7 @@ public class ZulipPollingService extends Service {
     }
 
     // load credentials from capacitor preferences (shared prefs)
+    // returns [serverUrl, email, apiKey, authMethod]
     private String[] loadCredentials() {
         try {
             SharedPreferences prefs = getSharedPreferences(
@@ -235,12 +253,13 @@ public class ZulipPollingService extends Service {
                 String serverUrl = account.getString("serverUrl");
                 String email = account.getString("email");
                 String apiKey = account.getString("apiKey");
+                String authMethod = account.optString("authMethod", "unknown");
 
                 // check if this is the active account (format: serverUrl::email)
                 String accountId = serverUrl + "::" + email;
                 if (accountId.equals(lastActive)) {
                     Log.d(TAG, "loaded credentials for active account");
-                    return new String[] { serverUrl, email, apiKey };
+                    return new String[] { serverUrl, email, apiKey, authMethod };
                 }
             }
             Log.w(TAG, "no matching account found");
@@ -272,7 +291,10 @@ public class ZulipPollingService extends Service {
             }
             // filters
             settings.notifyOnMention = json.optBoolean("notifyOnMention", true);
-            settings.notifyOnPM = json.optBoolean("notifyOnPM", true);
+            // backwards compat: check old notifyOnPM if notifyOnDM not present
+            settings.notifyOnDM = json.has("notifyOnDM")
+                ? json.optBoolean("notifyOnDM", true)
+                : json.optBoolean("notifyOnPM", true);
             settings.notifyOnOther = json.optBoolean("notifyOnOther", true);
             settings.muteSelfMessages = json.optBoolean("muteSelfMessages", true);
             // muted streams/topics
@@ -304,10 +326,10 @@ public class ZulipPollingService extends Service {
         if (settings.muteSelfMessages && client != null && msg.senderId == client.getUserId()) return false;
         if (settings.quietHoursEnabled && isQuietHours()) return false;
 
-        boolean isPM = "private".equals(msg.type);
+        boolean isDM = "private".equals(msg.type);
         boolean isMention = msg.mentioned || msg.wildcardMentioned;
 
-        if (isPM) return settings.notifyOnPM;
+        if (isDM) return settings.notifyOnDM;
 
         // stream message
         if (isMention && !settings.notifyOnMention) return false;
@@ -431,7 +453,7 @@ public class ZulipPollingService extends Service {
             body = body.substring(0, 300) + "...";
         }
 
-        // conversation key: group by sender for PMs, by stream::topic for mentions
+        // conversation key: group by sender for DMs, by stream::topic for mentions
         String convKey;
         String convTitle;
         if ("private".equals(msg.type)) {

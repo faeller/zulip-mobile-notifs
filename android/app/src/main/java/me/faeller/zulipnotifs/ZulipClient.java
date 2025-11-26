@@ -159,7 +159,7 @@ public class ZulipClient {
                         if (recipient instanceof String) {
                             message.stream = (String) recipient;
                         } else {
-                            message.stream = null; // PM
+                            message.stream = null; // DM
                         }
 
                         // parse flags
@@ -213,7 +213,7 @@ public class ZulipClient {
         // format notification title
         public String getNotificationTitle() {
             if ("private".equals(type)) {
-                return "PM from " + senderName;
+                return "DM from " + senderName;
             }
             return senderName + " in #" + stream + " > " + subject;
         }
