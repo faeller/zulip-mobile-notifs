@@ -41,7 +41,7 @@ function cancelDelete() {
 
 <template>
   <div class="saved-credentials">
-    <button class="saved-btn" :disabled="disabled" @click="$emit('use')">
+    <div class="saved-btn" :class="{ disabled }" @click="!disabled && $emit('use')">
       <span class="saved-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
@@ -55,7 +55,6 @@ function cancelDelete() {
           <span v-if="authMethodLabel" class="auth-badge">{{ authMethodLabel }}</span>
         </small>
       </span>
-      <!-- delete button inside the component -->
       <button
         type="button"
         class="delete-icon-btn"
@@ -72,7 +71,7 @@ function cancelDelete() {
           <polyline points="20 6 9 17 4 12"/>
         </svg>
       </button>
-    </button>
+    </div>
     <!-- cancel hint when confirming -->
     <div v-if="confirmingDelete" class="delete-hint" @click="cancelDelete">
       tap elsewhere to cancel
@@ -108,9 +107,10 @@ function cancelDelete() {
   border-color: #333;
 }
 
-.saved-btn:disabled {
+.saved-btn.disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  pointer-events: none;
 }
 
 .saved-icon {

@@ -12,3 +12,4 @@ android/local.properties
 *.aab
 md_docs/
 release.keystore
+.pnpm-store/
