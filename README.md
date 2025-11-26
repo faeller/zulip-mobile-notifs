@@ -1,37 +1,51 @@
 # zulip-notifications
 
 <p align="center">
-  <img src="icon.svg" width="128" height="128" alt="zulip notifications icon">
+  <img src="android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png" width="128" height="128" alt="zulip notifications icon">
 </p>
 
-get browser/mobile notifications for zulip messages when the official app doesn't deliver them.
+get instant notifications for zulip messages when the official app doesn't deliver them reliably.
 
 > **note:** unofficial project, not affiliated with zulip.
 
 ## features
 
-- real-time notifications via zulip's event queue api (instant, not polling)
-- notifies on PMs and @-mentions
-- android app with background service
+- real-time notifications via zulip's event queue api (instant, no polling)
+- notifies on DMs and @-mentions
+- multi-account support with quick swtching
+- notification filters (mute channels, topics, quiet hours)
+- custom notification sounds
+- supports password, SSO, zuliprc, and manual api key auth
+- android foreground service for reliable background delivery
 - web app (keep tab open)
-- credentials stored locally
+- credentials stored locally only
+- optional public stats (can be disabled in settings) - [view them here](https://stats.faeller.me)
 
-## usage
+## screenshots
+
+<p align="center">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1.png" width="250" alt="setup screen">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2.png" width="250" alt="connected screen">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/3.png" width="227" alt="settings">
+</p>
+
+
+## install
 
 ### android
 
-download the apk from releases and install it. enter your zulip server url, email, and api key (found in zulip settings → account & privacy → api key).
+download the apk from [releases](https://github.com/faeller/zulip-mobile-notifs/releases) or get it form f-droid (coming soon).
 
 ### web
 
-open the hosted version or run locally:
+open the [hosted version](https://faeller.github.io/zulip-mobile-notifs/) or run locally:
 
 ```sh
 pnpm install
 pnpm dev
 ```
 
-## build android apk
+## build
 
 ```sh
 pnpm build
@@ -39,14 +53,17 @@ npx cap sync android
 cd android && ./gradlew assembleDebug
 ```
 
-apk will be at `android/app/build/outputs/apk/debug/app-debug.apk`
+apk at `android/app/build/outputs/apk/debug/app-debug.apk`
 
 ## roadmap
 
-- [ ] cloudflare worker for true web push (tab closed)
-- [ ] notification filtering options
+- [x] notification filtering options
+- [x] multi-account support
+- [x] custom sounds
+- [x] quiet hours
+- [ ] f-droid release
+- [ ] cloudflare worker for true web push
 - [ ] ios support maybe
-- [ ] stream notification settings
 
 ## license
 
