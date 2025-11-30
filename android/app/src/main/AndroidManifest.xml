@@ -57,6 +57,17 @@
                 android:value="Maintains persistent connection to Zulip server for real-time message notifications" />
         </service>
 
+        <!-- js-based polling service using rhino - enable by changing BootReceiver/ForegroundServicePlugin -->
+        <service
+            android:name=".JSPollingService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Maintains persistent connection to Zulip server for real-time message notifications" />
+        </service>
+
         <!-- auto-start after boot/unlock -->
         <receiver
             android:name=".BootReceiver"

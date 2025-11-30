@@ -84,8 +84,14 @@ export interface AppSettings {
   quietHoursEnabled: boolean
   quietHoursStart: string // HH:MM format
   quietHoursEnd: string // HH:MM format
+  // quiet days (0=sunday, 1=monday, ..., 6=saturday)
+  quietDaysEnabled: boolean
+  quietDays: number[]
   // privacy
   analyticsEnabled: boolean // send anonymous usage stats
+  // developer options (hidden until activated)
+  devMode: boolean // show developer settings
+  useJSService: boolean // use rhino-based JSPollingService instead of native
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -108,8 +114,14 @@ export const DEFAULT_SETTINGS: AppSettings = {
   quietHoursEnabled: false,
   quietHoursStart: '22:00',
   quietHoursEnd: '07:00',
+  // quiet days
+  quietDaysEnabled: false,
+  quietDays: [],
   // privacy
-  analyticsEnabled: true
+  analyticsEnabled: true,
+  // developer options
+  devMode: false,
+  useJSService: false
 }
 
 // app state

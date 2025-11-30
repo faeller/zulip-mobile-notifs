@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc --noEmit && vite build",
+    "build": "vue-tsc --noEmit && vite build && pnpm build:shared",
+    "build:shared": "node scripts/build-shared.js",
     "preview": "vite preview"
   },
   "keywords": [
@@ -17,6 +18,7 @@
   "license": "MIT",
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.2",
+    "esbuild": "^0.24.0",
     "typescript": "^5.9.3",
     "vite": "^7.2.4",
     "vue-tsc": "^3.1.5"

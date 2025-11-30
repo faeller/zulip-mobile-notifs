@@ -15,6 +15,7 @@ import BackButton from './components/BackButton.vue'
 import RememberToggle from './components/RememberToggle.vue'
 import FormField from './components/FormField.vue'
 import SavedCredentials from './components/SavedCredentials.vue'
+import Toast from './components/Toast.vue'
 
 // icons as components for reuse
 const LoginIcon = `<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/>`
@@ -68,8 +69,28 @@ const showTopicSuggestions = ref(false)
 const quietHoursEnabled = ref(false)
 const quietHoursStart = ref('22:00')
 const quietHoursEnd = ref('07:00')
+// quiet days (0=sunday, 6=saturday)
+const quietDaysEnabled = ref(false)
+const quietDays = ref<number[]>([])
+// display order: mon-sun, with actual day index for each
+const weekdays = [
+  { label: 'Mon', day: 1 },
+  { label: 'Tue', day: 2 },
+  { label: 'Wed', day: 3 },
+  { label: 'Thu', day: 4 },
+  { label: 'Fri', day: 5 },
+  { label: 'Sat', day: 6 },
+  { label: 'Sun', day: 0 },
+]
 // privacy
 const analyticsEnabled = ref(true)
+// developer mode
+const devMode = ref(false)
+const useJSService = ref(false)
+const devTapCount = ref(0)
+const devTapTimeout = ref<ReturnType<typeof setTimeout> | null>(null)
+const devTapMessage = ref('')
+const devTapMessageTimeout = ref<ReturnType<typeof setTimeout> | null>(null)
 const loginError = ref('')
 const isLoggingIn = ref(false)
 const isCheckingServer = ref(false)
@@ -149,8 +170,14 @@ onMounted(async () => {
   quietHoursEnabled.value = settings.quietHoursEnabled
   quietHoursStart.value = settings.quietHoursStart || '22:00'
   quietHoursEnd.value = settings.quietHoursEnd || '07:00'
+  // quiet days
+  quietDaysEnabled.value = settings.quietDaysEnabled ?? false
+  quietDays.value = settings.quietDays || []
   // privacy
   analyticsEnabled.value = settings.analyticsEnabled ?? true
+  // developer mode
+  devMode.value = settings.devMode ?? false
+  useJSService.value = settings.useJSService ?? false
 
   // handle android back button
   CapApp.addListener('backButton', () => {
@@ -307,6 +334,52 @@ function handleLogoutClick() {
   }
 }
 
+// tap icon 8 times to enable dev mode (like android dev options)
+function handleDevTap() {
+  if (devMode.value) return // already enabled
+
+  devTapCount.value++
+
+  // reset counter after 2 seconds of no taps
+  if (devTapTimeout.value) clearTimeout(devTapTimeout.value)
+  devTapTimeout.value = setTimeout(() => {
+    devTapCount.value = 0
+    devTapMessage.value = ''
+  }, 2000)
+
+  // show progress feedback
+  const remaining = 8 - devTapCount.value
+  if (remaining <= 3 && remaining > 0) {
+    showDevTapMessage(`${remaining} taps to enable developer mode`)
+  }
+
+  if (devTapCount.value >= 8) {
+    devMode.value = true
+    devTapCount.value = 0
+    handleNotificationSettingChange()
+    showDevTapMessage('Developer mode enabled!')
+  }
+}
+
+function showDevTapMessage(msg: string) {
+  devTapMessage.value = msg
+  if (devTapMessageTimeout.value) clearTimeout(devTapMessageTimeout.value)
+  devTapMessageTimeout.value = setTimeout(() => {
+    devTapMessage.value = ''
+  }, 2000)
+}
+
+// switch between native and JS polling service
+async function handleServiceChange() {
+  handleNotificationSettingChange()
+  // restart service to apply change
+  if (Capacitor.isNativePlatform()) {
+    console.log('[dev] service preference changed, restarting...')
+    await stopForegroundService()
+    await startForegroundService()
+  }
+}
+
 async function handleLogoutConfirmed() {
   confirmingLogout.value = false
   // remove the active account and disconnect
@@ -349,8 +422,14 @@ function handleNotificationSettingChange() {
     quietHoursEnabled: quietHoursEnabled.value,
     quietHoursStart: quietHoursStart.value,
     quietHoursEnd: quietHoursEnd.value,
+    // quiet days
+    quietDaysEnabled: quietDaysEnabled.value,
+    quietDays: quietDays.value,
     // privacy
-    analyticsEnabled: analyticsEnabled.value
+    analyticsEnabled: analyticsEnabled.value,
+    // developer
+    devMode: devMode.value,
+    useJSService: useJSService.value
   })
 }
 
@@ -471,6 +550,15 @@ async function handlePickSoundFile() {
     console.log('[sound] picked file:', result.uri, result.title)
     handleNotificationSettingChange()
   }
+}
+
+function toggleQuietDay(day: number) {
+  if (quietDays.value.includes(day)) {
+    quietDays.value = quietDays.value.filter(d => d !== day)
+  } else {
+    quietDays.value = [...quietDays.value, day]
+  }
+  handleNotificationSettingChange()
 }
 
 const HUMMUS_URL = 'https://archive.org/download/hummus-slack/hummus-slack.mp3'
@@ -776,11 +864,13 @@ async function handleDownloadHummus() {
     <!-- connected screen -->
     <div v-if="screen === 'connected'" class="screen connected">
       <header class="navbar">
-        <div class="navbar-brand">
+        <div class="navbar-brand" @click="handleDevTap">
           <img src="/icon.svg" alt="" class="navbar-icon" />
           <span>Zulip Notifications</span>
         </div>
       </header>
+
+      <Toast :message="devTapMessage" />
 
       <div class="status-card">
         <div class="status-indicator" :class="state.connectionState">
@@ -985,6 +1075,25 @@ async function handleDownloadHummus() {
               <input type="time" v-model="quietHoursEnd" @change="handleNotificationSettingChange">
             </div>
           </div>
+
+          <label class="checkbox-field" style="margin-top: 16px;">
+            <input type="checkbox" v-model="quietDaysEnabled" @change="handleNotificationSettingChange">
+            <span>Enable quiet days</span>
+          </label>
+          <small class="setting-hint">No notifications on selected days</small>
+
+          <div v-if="quietDaysEnabled" class="quiet-days-selector">
+            <button
+              v-for="wd in weekdays"
+              :key="wd.day"
+              type="button"
+              class="day-btn"
+              :class="{ active: quietDays.includes(wd.day) }"
+              @click="toggleQuietDay(wd.day)"
+            >
+              {{ wd.label }}
+            </button>
+          </div>
         </div>
 
         <div class="settings-divider"></div>
@@ -998,6 +1107,27 @@ async function handleDownloadHummus() {
           </label>
           <small class="setting-hint">Helps improve the app. No personal data collected. <a href="https://stats.faeller.me" target="_blank" class="stats-link">View stats</a></small>
         </div>
+
+        <!-- developer options (hidden until enabled by tapping icon 8x) -->
+        <template v-if="devMode">
+          <div class="settings-divider"></div>
+
+          <div class="settings-section">
+            <h3>Developer Options</h3>
+
+            <label class="checkbox-field">
+              <input type="checkbox" v-model="useJSService" @change="handleServiceChange" :disabled="!isNativePlatform">
+              <span>Use Rhino JS polling service</span>
+            </label>
+            <small class="setting-hint">
+              {{ isNativePlatform ? 'Uses shared JS logic via Rhino engine. Requires service restart.' : 'Only available on Android.' }}
+            </small>
+
+            <button class="dev-btn" @click="devMode = false; handleNotificationSettingChange()">
+              Disable developer mode
+            </button>
+          </div>
+        </template>
       </div>
 
       <div class="actions-wrapper">

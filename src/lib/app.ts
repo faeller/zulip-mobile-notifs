@@ -342,6 +342,15 @@ export class App {
     return currentMinutes >= startMinutes && currentMinutes < endMinutes
   }
 
+  // check if current day is a quiet day (0=sunday, 6=saturday)
+  private isQuietDay(): boolean {
+    if (!this.state.settings.quietDaysEnabled) return false
+    if (this.state.settings.quietDays.length === 0) return false
+
+    const now = new Date()
+    return this.state.settings.quietDays.includes(now.getDay())
+  }
+
   // determine if message should trigger notification based on settings
   private shouldNotify(msg: ZulipMessage, flags: string[]): boolean {
     const settings = this.state.settings
@@ -355,6 +364,12 @@ export class App {
     // check quiet hours
     if (this.isQuietHours()) {
       console.log('[notify] quiet hours active, skipping')
+      return false
+    }
+
+    // check quiet days
+    if (this.isQuietDay()) {
+      console.log('[notify] quiet day active, skipping')
       return false
     }
 

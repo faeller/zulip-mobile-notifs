@@ -2,7 +2,9 @@ package me.faeller.zulipnotifs;
 
 import android.app.Activity;
 import android.content.ContentValues;
+import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.media.RingtoneManager;
 import android.net.Uri;
@@ -18,15 +20,38 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import org.json.JSONObject;
 import java.io.InputStream;
 import java.io.OutputStream;
 
 @CapacitorPlugin(name = "ForegroundService")
 public class ForegroundServicePlugin extends Plugin {
 
+    // check settings to determine which service to use
+    private Class<?> getServiceClass() {
+        try {
+            SharedPreferences prefs = getContext().getSharedPreferences("CapacitorStorage", Context.MODE_PRIVATE);
+            String settingsJson = prefs.getString("settings", null);
+            if (settingsJson != null) {
+                JSONObject settings = new JSONObject(settingsJson);
+                if (settings.optBoolean("useJSService", false)) {
+                    Log.d("ForegroundService", "using JSPollingService");
+                    return JSPollingService.class;
+                }
+            }
+        } catch (Exception e) {
+            Log.e("ForegroundService", "failed to read settings", e);
+        }
+        return ZulipPollingService.class;
+    }
+
     @PluginMethod
     public void start(PluginCall call) {
-        Intent serviceIntent = new Intent(getContext(), ZulipPollingService.class);
+        // stop both services first to ensure clean switch
+        getContext().stopService(new Intent(getContext(), ZulipPollingService.class));
+        getContext().stopService(new Intent(getContext(), JSPollingService.class));
+
+        Intent serviceIntent = new Intent(getContext(), getServiceClass());
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             getContext().startForegroundService(serviceIntent);
@@ -39,8 +64,9 @@ public class ForegroundServicePlugin extends Plugin {
 
     @PluginMethod
     public void stop(PluginCall call) {
-        Intent serviceIntent = new Intent(getContext(), ZulipPollingService.class);
-        getContext().stopService(serviceIntent);
+        // stop both services
+        getContext().stopService(new Intent(getContext(), ZulipPollingService.class));
+        getContext().stopService(new Intent(getContext(), JSPollingService.class));
         call.resolve();
     }
 

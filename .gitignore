@@ -4,6 +4,7 @@ dist
 *.local
 
 # android build artifacts (keep source, ignore build outputs)
+android/app/src/main/assets/zulip-service.js
 android/app/build
 android/.gradle
 android/build

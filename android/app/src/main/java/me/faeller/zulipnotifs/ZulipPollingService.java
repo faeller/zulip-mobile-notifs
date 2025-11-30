@@ -82,6 +82,9 @@ public class ZulipPollingService extends Service {
         boolean quietHoursEnabled = false;
         String quietHoursStart = "22:00";
         String quietHoursEnd = "07:00";
+        // quiet days (0=sunday, 6=saturday)
+        boolean quietDaysEnabled = false;
+        int[] quietDays = new int[0];
     }
 
     private NotifSettings settings = new NotifSettings();
@@ -316,6 +319,15 @@ public class ZulipPollingService extends Service {
             settings.quietHoursEnabled = json.optBoolean("quietHoursEnabled", false);
             settings.quietHoursStart = json.optString("quietHoursStart", "22:00");
             settings.quietHoursEnd = json.optString("quietHoursEnd", "07:00");
+            // quiet days
+            settings.quietDaysEnabled = json.optBoolean("quietDaysEnabled", false);
+            JSONArray quietDaysArr = json.optJSONArray("quietDays");
+            if (quietDaysArr != null) {
+                settings.quietDays = new int[quietDaysArr.length()];
+                for (int i = 0; i < quietDaysArr.length(); i++) {
+                    settings.quietDays[i] = quietDaysArr.optInt(i);
+                }
+            }
         } catch (Exception e) {
             Log.e(TAG, "failed to load settings", e);
         }
@@ -325,6 +337,7 @@ public class ZulipPollingService extends Service {
     private boolean shouldShowNotification(ZulipClient.ZulipMessage msg) {
         if (settings.muteSelfMessages && client != null && msg.senderId == client.getUserId()) return false;
         if (settings.quietHoursEnabled && isQuietHours()) return false;
+        if (settings.quietDaysEnabled && isQuietDay()) return false;
 
         boolean isDM = "private".equals(msg.type);
         boolean isMention = msg.mentioned || msg.wildcardMentioned;
@@ -437,6 +450,19 @@ public class ZulipPollingService extends Service {
         } catch (Exception e) {
             return false;
         }
+    }
+
+    // check if current day is a quiet day (0=sunday, 6=saturday)
+    private boolean isQuietDay() {
+        if (!settings.quietDaysEnabled || settings.quietDays.length == 0) return false;
+
+        java.util.Calendar cal = java.util.Calendar.getInstance();
+        int today = cal.get(java.util.Calendar.DAY_OF_WEEK) - 1; // calendar uses 1-7, we use 0-6
+
+        for (int day : settings.quietDays) {
+            if (day == today) return true;
+        }
+        return false;
     }
 
     private void showMessageNotification(ZulipClient.ZulipMessage msg) {
