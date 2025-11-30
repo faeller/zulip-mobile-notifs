@@ -1,0 +1,20 @@
+# one-click deploy config - for new users deploying their own instance
+# for manual deploys, use: pnpm run deploy (uses worker/wrangler.toml)
+name = "zulip-web-pusher"
+main = "worker/src/index.ts"
+compatibility_date = "2024-09-23"
+workers_dev = true
+
+[triggers]
+crons = ["* * * * *"]  # every minute
+
+# kv namespace - will be auto-provisioned by cloudflare
+[[kv_namespaces]]
+binding = "SUBSCRIPTIONS"
+
+# secrets - cloudflare will prompt for these during one-click deploy
+[vars]
+VAPID_PUBLIC_KEY = ""
+VAPID_PRIVATE_KEY = ""
+VAPID_SUBJECT = ""
+ENCRYPTION_SECRET = ""

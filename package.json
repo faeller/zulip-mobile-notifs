@@ -8,7 +8,7 @@
     "build": "vue-tsc --noEmit && vite build && pnpm build:shared",
     "build:shared": "node scripts/build-shared.js",
     "preview": "vite preview",
-    "deploy": "npx wrangler deploy -c worker/wrangler.toml"
+    "deploy": "npx wrangler deploy --config worker/wrangler.toml"
   },
   "keywords": [
     "zulip",
@@ -37,5 +37,24 @@
     "@capacitor/preferences": "^7.0.2",
     "@capawesome/capacitor-background-task": "^7.0.1",
     "vue": "^3.5.25"
+  },
+  "cloudflare": {
+    "bindings": {
+      "SUBSCRIPTIONS": {
+        "description": "kv namespace for storing push subscriptions and encrypted credentials"
+      },
+      "VAPID_PUBLIC_KEY": {
+        "description": "public key for web push. generate with: npx web-push generate-vapid-keys or at https://d3v.one/vapid-key-generator/"
+      },
+      "VAPID_PRIVATE_KEY": {
+        "description": "private key for web push. generate with: npx web-push generate-vapid-keys or at https://d3v.one/vapid-key-generator/"
+      },
+      "VAPID_SUBJECT": {
+        "description": "contact email for web push. format: mailto:your@email.com"
+      },
+      "ENCRYPTION_SECRET": {
+        "description": "master key for encrypting stored credentials. use a random 32+ char string"
+      }
+    }
   }
 }
