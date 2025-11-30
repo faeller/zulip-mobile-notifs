@@ -31,8 +31,18 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 }
 
 // fetch VAPID public key from pusher server
+// normalize URL to ensure https://
+function normalizeUrl(url: string): string {
+  url = url.trim()
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    url = 'https://' + url
+  }
+  return url.replace(/\/$/, '') // remove trailing slash
+}
+
 async function getVapidPublicKey(pusherUrl: string): Promise<string> {
-  const res = await fetch(`${pusherUrl}/vapid-public-key`)
+  const url = normalizeUrl(pusherUrl)
+  const res = await fetch(`${url}/vapid-public-key`)
   if (!res.ok) throw new Error('failed to fetch VAPID public key')
   const data = await res.json()
   return data.publicKey
@@ -109,8 +119,9 @@ export async function registerWithPusher(
   zulipApiKey: string,
   filters?: Partial<FilterSettings>
 ): Promise<{ success: boolean; endpoint?: string; error?: string }> {
+  const url = normalizeUrl(pusherUrl)
   try {
-    const res = await fetch(`${pusherUrl}/register`, {
+    const res = await fetch(`${url}/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -139,8 +150,9 @@ export async function updatePusherFilters(
   endpoint: string,
   filters: Partial<FilterSettings>
 ): Promise<{ success: boolean; error?: string }> {
+  const url = normalizeUrl(pusherUrl)
   try {
-    const res = await fetch(`${pusherUrl}/update`, {
+    const res = await fetch(`${url}/update`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ endpoint, filters })
@@ -162,8 +174,9 @@ export async function testPush(
   pusherUrl: string,
   endpoint: string
 ): Promise<{ success: boolean; error?: string }> {
+  const url = normalizeUrl(pusherUrl)
   try {
-    const res = await fetch(`${pusherUrl}/test-push`, {
+    const res = await fetch(`${url}/test-push`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ endpoint })
@@ -185,8 +198,9 @@ export async function unregisterFromPusher(
   pusherUrl: string,
   endpoint: string
 ): Promise<boolean> {
+  const url = normalizeUrl(pusherUrl)
   try {
-    const res = await fetch(`${pusherUrl}/unregister`, {
+    const res = await fetch(`${url}/unregister`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ endpoint })
@@ -199,11 +213,12 @@ export async function unregisterFromPusher(
 
 // check pusher server status
 export async function checkPusherStatus(pusherUrl: string = DEFAULT_PUSHER_URL): Promise<PusherStatus> {
+  const url = normalizeUrl(pusherUrl)
   try {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 5000)
 
-    const res = await fetch(`${pusherUrl}/status`, {
+    const res = await fetch(`${url}/status`, {
       method: 'GET',
       signal: controller.signal
     })

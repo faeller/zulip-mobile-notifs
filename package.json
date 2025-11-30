@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build && pnpm build:shared",
     "build:shared": "node scripts/build-shared.js",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "deploy": "npx wrangler deploy -c worker/wrangler.toml"
   },
   "keywords": [
     "zulip",

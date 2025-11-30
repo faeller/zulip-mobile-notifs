@@ -13,7 +13,7 @@ deploy your own:
 
 ### one-click deploy
 
-[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/faeller/zulip-mobile-notifs/tree/main/worker)
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/faeller/zulip-mobile-notifs)
 
 cloudflare will auto-provision the KV namespace and prompt you for secrets.
 

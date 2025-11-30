@@ -1247,9 +1247,15 @@ async function handleDownloadHummus() {
         </div>
       </div>
 
-      <!-- method selector (hidden during confirmation) -->
+      <!-- loading state while connecting -->
+      <div v-if="isConfirming" class="connecting-state">
+        <div class="spinner"></div>
+        <p>Connecting to push server...</p>
+      </div>
+
+      <!-- method selector (hidden during confirmation/loading) -->
       <NotificationMethodSelector
-        v-if="!pendingMethod && !showPwaDialog"
+        v-if="!pendingMethod && !showPwaDialog && !isConfirming"
         @select="handleMethodSelect"
       />
     </div>
