@@ -1,0 +1,12 @@
+# VAPID keys for Web Push authentication
+# Generate with: npx web-push generate-vapid-keys
+VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+
+# Contact email for VAPID (required by Web Push spec)
+# Format: mailto:your@email.com
+VAPID_SUBJECT=mailto:your@email.com
+
+# Master encryption key for storing credentials
+# Generate a random 32+ character string
+ENCRYPTION_SECRET=

@@ -1,0 +1,22 @@
+name = "zulip-web-pusher"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+workers_dev = true
+
+[[routes]]
+pattern = "cf-zulip-web-pusher.faeller.me"
+custom_domain = true
+
+[triggers]
+crons = ["* * * * *"]  # every minute
+
+[[kv_namespaces]]
+binding = "SUBSCRIPTIONS"
+id = "72da8bcbf5dc44a8b07deeaaff20c50c"
+
+[vars]
+# set via `wrangler secret put VAPID_PUBLIC_KEY` etc
+# VAPID_PUBLIC_KEY = ""
+# VAPID_PRIVATE_KEY = ""
+# VAPID_SUBJECT = "mailto:your@email.com"
+# ENCRYPTION_SECRET = ""

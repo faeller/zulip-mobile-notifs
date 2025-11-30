@@ -1,0 +1,34 @@
+{
+  "name": "zulip-web-pusher",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241127.0",
+    "typescript": "^5.0.0",
+    "wrangler": "^3.0.0"
+  },
+  "cloudflare": {
+    "bindings": {
+      "SUBSCRIPTIONS": {
+        "description": "KV namespace for storing push subscriptions and encrypted credentials"
+      },
+      "VAPID_PUBLIC_KEY": {
+        "description": "Public key for Web Push authentication. Generate with: `npx web-push generate-vapid-keys`"
+      },
+      "VAPID_PRIVATE_KEY": {
+        "description": "Private key for Web Push authentication. Generate with: `npx web-push generate-vapid-keys`"
+      },
+      "VAPID_SUBJECT": {
+        "description": "Contact email for Web Push. Format: `mailto:your@email.com`"
+      },
+      "ENCRYPTION_SECRET": {
+        "description": "Master key for encrypting stored credentials. Use a random 32+ character string"
+      }
+    }
+  }
+}

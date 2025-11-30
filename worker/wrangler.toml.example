@@ -1,0 +1,25 @@
+# zulip-web-pusher cloudflare worker config
+# copy to wrangler.toml for local development, or use deploy button for auto-setup
+
+name = "zulip-web-pusher"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+workers_dev = true
+
+# cron trigger - polls zulip every minute (4 rounds of 15s each)
+[triggers]
+crons = ["* * * * *"]
+
+# KV namespace for storing subscriptions
+# auto-provisioned by deploy button, or create manually:
+# pnpm exec wrangler kv:namespace create SUBSCRIPTIONS
+[[kv_namespaces]]
+binding = "SUBSCRIPTIONS"
+id = "placeholder"
+
+# secrets - set via dashboard or wrangler secret put
+# these are prompted during deploy button setup
+# VAPID_PUBLIC_KEY   - from npx web-push generate-vapid-keys
+# VAPID_PRIVATE_KEY  - from npx web-push generate-vapid-keys
+# VAPID_SUBJECT      - mailto:your@email.com
+# ENCRYPTION_SECRET  - random 32+ character string
