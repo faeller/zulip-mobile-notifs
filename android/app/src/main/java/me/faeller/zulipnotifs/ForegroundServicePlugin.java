@@ -23,6 +23,8 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import org.json.JSONObject;
 import java.io.InputStream;
 import java.io.OutputStream;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 
 @CapacitorPlugin(name = "ForegroundService")
 public class ForegroundServicePlugin extends Plugin {
@@ -45,21 +47,47 @@ public class ForegroundServicePlugin extends Plugin {
         return ZulipPollingService.class;
     }
 
+    private static final String SERVICE_CHANNEL_ID = "zulip_polling_channel";
+
+    // ensure notification channel exists before starting service
+    private void ensureNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationManager manager = getContext().getSystemService(NotificationManager.class);
+            if (manager.getNotificationChannel(SERVICE_CHANNEL_ID) == null) {
+                NotificationChannel channel = new NotificationChannel(
+                    SERVICE_CHANNEL_ID,
+                    "Zulip Polling Service",
+                    NotificationManager.IMPORTANCE_LOW
+                );
+                channel.setDescription("Keeps the connection to Zulip alive");
+                channel.setSound(null, null);
+                manager.createNotificationChannel(channel);
+                Log.d("ForegroundService", "created notification channel");
+            }
+        }
+    }
+
     @PluginMethod
     public void start(PluginCall call) {
+        // FIRST ensure notification channel exists
+        ensureNotificationChannel();
+
         // stop both services first to ensure clean switch
         getContext().stopService(new Intent(getContext(), ZulipPollingService.class));
         getContext().stopService(new Intent(getContext(), JSPollingService.class));
 
-        Intent serviceIntent = new Intent(getContext(), getServiceClass());
+        // small delay to let services fully stop before starting
+        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+            Intent serviceIntent = new Intent(getContext(), getServiceClass());
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            getContext().startForegroundService(serviceIntent);
-        } else {
-            getContext().startService(serviceIntent);
-        }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                getContext().startForegroundService(serviceIntent);
+            } else {
+                getContext().startService(serviceIntent);
+            }
 
-        call.resolve();
+            call.resolve();
+        }, 100);
     }
 
     @PluginMethod

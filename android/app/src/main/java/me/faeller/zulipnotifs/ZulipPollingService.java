@@ -113,9 +113,16 @@ public class ZulipPollingService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        // create persistent notification
-        Notification notification = createServiceNotification();
-        startForeground(SERVICE_NOTIFICATION_ID, notification);
+        // IMMEDIATELY create notification and start foreground to avoid ANR
+        try {
+            createNotificationChannels(); // ensure channel exists
+            Notification notification = createServiceNotification();
+            startForeground(SERVICE_NOTIFICATION_ID, notification);
+        } catch (Exception e) {
+            Log.e(TAG, "failed to start foreground", e);
+            stopSelf();
+            return START_NOT_STICKY;
+        }
 
         // start polling if not already running
         if (!isRunning && (pollingThread == null || !pollingThread.isAlive())) {

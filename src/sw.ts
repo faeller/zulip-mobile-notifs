@@ -19,7 +19,7 @@ self.addEventListener('push', (event) => {
     const data = event.data.json()
     console.log('[sw] push data:', data)
 
-    const options: NotificationOptions = {
+    const options = {
       body: data.body || '',
       icon: '/pwa-192.png',
       badge: '/pwa-192.png',
@@ -29,7 +29,7 @@ self.addEventListener('push', (event) => {
         url: data.url || '/',
         messageId: data.messageId
       }
-    }
+    } as NotificationOptions
 
     event.waitUntil(
       self.registration.showNotification(data.title || 'Zulip', options)
@@ -62,7 +62,7 @@ self.addEventListener('notificationclick', (event) => {
 })
 
 // handle subscription change (browser refreshes subscription)
-self.addEventListener('pushsubscriptionchange', (event) => {
+self.addEventListener('pushsubscriptionchange', () => {
   // re-subscribe and update server
   // for now just log - PWA will re-register on next open
   console.log('[sw] push subscription changed')

@@ -18,7 +18,6 @@ import androidx.work.PeriodicWorkRequest;
 import androidx.work.WorkManager;
 import org.json.JSONArray;
 import org.json.JSONObject;
-import org.mozilla.javascript.Context as RhinoContext;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.Function;
 import java.io.BufferedReader;
@@ -54,7 +53,7 @@ public class JSPollingService extends Service {
     private ZulipClient client;
 
     // rhino js engine
-    private RhinoContext rhinoContext;
+    private org.mozilla.javascript.Context rhinoContext;
     private Scriptable scope;
     private boolean jsInitialized = false;
 
@@ -131,9 +130,9 @@ public class JSPollingService extends Service {
 
     private void initializeRhino() {
         try {
-            rhinoContext = RhinoContext.enter();
+            rhinoContext = org.mozilla.javascript.Context.enter();
             rhinoContext.setOptimizationLevel(-1); // interpretive mode for android
-            rhinoContext.setLanguageVersion(RhinoContext.VERSION_ES6);
+            rhinoContext.setLanguageVersion(org.mozilla.javascript.Context.VERSION_ES6);
             scope = rhinoContext.initStandardObjects();
 
             // load shared js from assets
@@ -153,7 +152,7 @@ public class JSPollingService extends Service {
     private void cleanupRhino() {
         if (rhinoContext != null) {
             try {
-                RhinoContext.exit();
+                org.mozilla.javascript.Context.exit();
             } catch (Exception e) {
                 Log.w(TAG, "error cleaning up rhino", e);
             }
@@ -192,14 +191,14 @@ public class JSPollingService extends Service {
             if (funcObj instanceof Function) {
                 Function func = (Function) funcObj;
                 // re-enter context for this thread if needed
-                RhinoContext ctx = RhinoContext.enter();
+                org.mozilla.javascript.Context ctx = org.mozilla.javascript.Context.enter();
                 try {
                     ctx.setOptimizationLevel(-1);
-                    ctx.setLanguageVersion(RhinoContext.VERSION_ES6);
+                    ctx.setLanguageVersion(org.mozilla.javascript.Context.VERSION_ES6);
                     Object result = func.call(ctx, scope, scope, args);
-                    return RhinoContext.toString(result);
+                    return org.mozilla.javascript.Context.toString(result);
                 } finally {
-                    RhinoContext.exit();
+                    org.mozilla.javascript.Context.exit();
                 }
             } else {
                 Log.w(TAG, "js function not found: " + funcName);
@@ -343,12 +342,10 @@ public class JSPollingService extends Service {
             json.put("id", msg.id);
             json.put("senderId", msg.senderId);
             json.put("senderName", msg.senderName);
-            json.put("senderEmail", msg.senderEmail);
             json.put("type", msg.type);
             json.put("stream", msg.stream);
             json.put("subject", msg.subject);
             json.put("content", msg.content);
-            json.put("timestamp", msg.timestamp);
             json.put("mentioned", msg.mentioned);
             json.put("wildcardMentioned", msg.wildcardMentioned);
             return json.toString();

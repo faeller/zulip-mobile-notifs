@@ -137,6 +137,20 @@ export async function startSsoLogin(serverUrl: string, methodLoginUrl?: string):
   return new Promise((resolve) => {
     pendingResolve = resolve
 
+    // listen for browser close - resolve null if user cancels
+    Browser.addListener('browserFinished', () => {
+      console.log('[sso] browser closed')
+      // small delay to allow deep link callback to arrive first
+      setTimeout(() => {
+        if (pendingResolve) {
+          console.log('[sso] no callback received, resolving null')
+          pendingResolve(null)
+          pendingResolve = null
+          pendingOtp = null
+        }
+      }, 500)
+    })
+
     // on native, open in system browser
     Browser.open({ url: loginUrl })
   })

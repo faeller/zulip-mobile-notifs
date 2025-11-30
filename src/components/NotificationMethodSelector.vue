@@ -42,13 +42,12 @@ const RadioIcon = `<circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1
         <span class="option-text">
           <strong>Foreground Service (recommended)</strong>
           <small>Instant notifications, credentials stay on device</small>
-          <small class="caveat">Uses slightly more battery to keep connection open, but negligible on most devices</small>
+          <small class="caveat">Uses slightly more battery, negligible on most devices</small>
         </span>
       </button>
 
-      <!-- web push (cloudflare worker) - only show as available on web -->
+      <!-- web push (cloudflare worker) -->
       <button
-        v-if="!isNative"
         class="option-btn"
         :class="{ active: current === 'web-push' }"
         @click="emit('select', 'web-push')"
@@ -57,8 +56,8 @@ const RadioIcon = `<circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" v-html="CloudIcon" />
         </span>
         <span class="option-text">
-          <strong>Web Push (recommended)</strong>
-          <small>Instant when tab open, ~15s delay when closed</small>
+          <strong>Web Push {{ isNative ? '' : '(recommended)' }}</strong>
+          <small>{{ isNative ? 'Via PWA, ~15s delay, less battery' : 'Instant when tab open, ~15s delay when closed' }}</small>
           <small class="caveat">Credentials sent to server (encrypted, easily self-hostable)</small>
         </span>
       </button>
@@ -105,16 +104,6 @@ const RadioIcon = `<circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1
         </span>
       </button>
 
-      <!-- web push greyed out on native -->
-      <button v-if="isNative" class="option-btn disabled" disabled>
-        <span class="option-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" v-html="CloudIcon" />
-        </span>
-        <span class="option-text">
-          <strong>Web Push <span class="platform-tag">Web</span></strong>
-          <small>Background notifications via Cloudflare worker</small>
-        </span>
-      </button>
 
       <!-- long-poll server (coming soon) -->
       <button class="option-btn disabled" disabled>

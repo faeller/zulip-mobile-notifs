@@ -5,7 +5,7 @@ import { pickZuliprc } from './lib/zuliprc'
 import { fetchApiKey } from './lib/auth'
 import { startSsoLogin, setupSsoListener, isSsoSupported } from './lib/sso-auth'
 import { pickNotificationSound, pickSoundFile, downloadAndSetSound, startForegroundService, stopForegroundService } from './lib/foreground-service'
-import { isPushSupported, subscribeToPush, unsubscribeFromPush, registerWithPusher, unregisterFromPusher, checkPusherStatus, getExistingSubscription, updatePusherFilters, testPush } from './lib/web-push'
+import { isPushSupported, subscribeToPush, unsubscribeFromPush, registerWithPusher, unregisterFromPusher, getExistingSubscription, updatePusherFilters, testPush } from './lib/web-push'
 import { App as CapApp } from '@capacitor/app'
 import { Capacitor } from '@capacitor/core'
 import { getServerSettings, type AuthInfo, type ExternalAuthMethod } from './lib/server-settings'
@@ -98,8 +98,6 @@ const devTapMessageTimeout = ref<ReturnType<typeof setTimeout> | null>(null)
 // notification method
 const notificationMethod = ref<NotificationMethod | null>(null)
 const notificationMethodConfigured = ref(false)
-const showMethodSelector = ref(false)
-const showCustomWorkerInput = ref(false)
 const pendingMethod = ref<NotificationMethod | null>(null) // for cloud confirmation
 // cloud push
 const cloudPushEnabled = ref(false)
@@ -452,31 +450,28 @@ async function handleServiceChange() {
 }
 
 // cloud push handlers
-async function checkCloudPusher() {
-  cloudPushStatus.value = 'checking'
-  cloudPushError.value = ''
-  const status = await checkPusherStatus(cloudPushUrl.value)
-  if (status.online) {
-    cloudPushStatus.value = 'online'
-  } else {
-    cloudPushStatus.value = 'offline'
-    cloudPushError.value = status.error || 'server offline'
-  }
-}
 
-async function handleCloudPushToggle() {
-  if (cloudPushEnabled.value) {
-    // enable cloud push
-    await enableCloudPush()
-  } else {
-    // disable cloud push
-    await disableCloudPush()
-  }
-  handleNotificationSettingChange()
+const showPwaDialog = ref(false)
+
+function openPwaInBrowser() {
+  window.open('https://faeller.github.io/zulip-mobile-notifs/', '_blank')
+  showPwaDialog.value = false
 }
 
 // handle notification method selection (from method-select screen or settings)
 async function handleMethodSelect(method: NotificationMethod) {
+  // already using this method, do nothing
+  if (method === notificationMethod.value) {
+    screen.value = 'connected'
+    return
+  }
+
+  // web-push on android needs PWA
+  if (method === 'web-push' && Capacitor.isNativePlatform()) {
+    showPwaDialog.value = true
+    return
+  }
+
   // web-push needs confirmation (sends credentials to server)
   if (method === 'web-push' && !pendingMethod.value) {
     pendingMethod.value = method
@@ -486,17 +481,17 @@ async function handleMethodSelect(method: NotificationMethod) {
   // clear pending state
   pendingMethod.value = null
 
-  notificationMethod.value = method
-  notificationMethodConfigured.value = true
-
-  // disable any existing cloud push first
-  if (cloudPushEnabled.value) {
+  // disable current method first
+  if (notificationMethod.value === 'web-push' && cloudPushEnabled.value) {
     await disableCloudPush()
     cloudPushEnabled.value = false
   }
-  if (Capacitor.isNativePlatform()) {
+  if (notificationMethod.value === 'foreground-service' && Capacitor.isNativePlatform()) {
     await stopForegroundService()
   }
+
+  notificationMethod.value = method
+  notificationMethodConfigured.value = true
 
   // enable the selected method
   if (method === 'web-push') {
@@ -553,10 +548,6 @@ async function confirmCloudMethod() {
   isConfirming.value = false
 }
 
-// show custom worker URL input
-function handleCustomWorkerClick() {
-  showCustomWorkerInput.value = true
-}
 
 // setup notification method (called on load from account)
 async function setupNotificationMethod(method: NotificationMethod) {
@@ -1212,18 +1203,18 @@ async function handleDownloadHummus() {
     <div v-if="screen === 'method-select'" class="screen method-select-screen">
       <!-- back button -->
       <BackButton
-        v-if="notificationMethodConfigured || pendingMethod"
+        v-if="notificationMethodConfigured || pendingMethod || showPwaDialog"
         label="Back"
         class="top-back-btn"
-        @click="pendingMethod ? cancelCloudConfirmation() : (screen = 'connected')"
+        @click="pendingMethod ? cancelCloudConfirmation() : showPwaDialog ? (showPwaDialog = false) : (screen = 'connected')"
       />
 
       <header class="screen-header centered-header">
         <img src="/icon.svg" alt="" class="header-icon" />
-        <h1>{{ notificationMethodConfigured ? 'Change delivery method' : 'Almost there!' }}</h1>
+        <h1>{{ notificationMethodConfigured ? 'Select delivery method' : 'Almost there!' }}</h1>
       </header>
 
-      <!-- web push confirmation dialog -->
+      <!-- web push confirmation dialog (web) -->
       <div v-if="pendingMethod" class="cloud-confirm-dialog">
         <p class="confirm-title">Send credentials to server?</p>
         <p class="confirm-text">
@@ -1242,9 +1233,23 @@ async function handleDownloadHummus() {
         </button>
       </div>
 
+      <!-- pwa required dialog (android) -->
+      <div v-if="showPwaDialog" class="cloud-confirm-dialog">
+        <p class="confirm-title">PWA required</p>
+        <p class="confirm-text">
+          Web Push on Android requires installing the PWA (Progressive Web App) from your browser.
+        </p>
+        <p class="confirm-text">Open the web app in Chrome, tap the menu, and select "Add to Home Screen". The PWA uses less battery than Foreground Service.</p>
+
+        <div class="confirm-buttons">
+          <button class="secondary" @click="showPwaDialog = false">Cancel</button>
+          <button class="primary" @click="openPwaInBrowser">Open Web App</button>
+        </div>
+      </div>
+
       <!-- method selector (hidden during confirmation) -->
       <NotificationMethodSelector
-        v-if="!pendingMethod"
+        v-if="!pendingMethod && !showPwaDialog"
         @select="handleMethodSelect"
       />
     </div>

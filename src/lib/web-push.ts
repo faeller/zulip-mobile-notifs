@@ -75,7 +75,7 @@ export async function subscribeToPush(pusherUrl: string = DEFAULT_PUSHER_URL): P
 
   const subscription = await registration.pushManager.subscribe({
     userVisibleOnly: true,
-    applicationServerKey: urlBase64ToUint8Array(vapidPublicKey)
+    applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) as BufferSource
   })
 
   const json = subscription.toJSON()
