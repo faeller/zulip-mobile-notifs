@@ -4,18 +4,22 @@ import { app } from './lib/app'
 import { pickZuliprc } from './lib/zuliprc'
 import { fetchApiKey } from './lib/auth'
 import { startSsoLogin, setupSsoListener, isSsoSupported } from './lib/sso-auth'
-import { pickNotificationSound, pickSoundFile, downloadAndSetSound } from './lib/foreground-service'
+import { pickNotificationSound, pickSoundFile, downloadAndSetSound, startForegroundService, stopForegroundService } from './lib/foreground-service'
+import { isPushSupported, subscribeToPush, unsubscribeFromPush, registerWithPusher, unregisterFromPusher, checkPusherStatus, getExistingSubscription, updatePusherFilters, testPush } from './lib/web-push'
 import { App as CapApp } from '@capacitor/app'
 import { Capacitor } from '@capacitor/core'
 import { getServerSettings, type AuthInfo, type ExternalAuthMethod } from './lib/server-settings'
 import { notifications } from './lib/notifications'
-import type { AppState, ZulipCredentials } from './lib/types'
+import type { AppState, ZulipCredentials, NotificationMethod } from './lib/types'
+import { DEFAULT_PUSHER_URL } from './lib/types'
 import PrivacyNotice from './components/PrivacyNotice.vue'
+import NotificationMethodSelector from './components/NotificationMethodSelector.vue'
 import BackButton from './components/BackButton.vue'
 import RememberToggle from './components/RememberToggle.vue'
 import FormField from './components/FormField.vue'
 import SavedCredentials from './components/SavedCredentials.vue'
 import Toast from './components/Toast.vue'
+import SelfHostLink from './components/SelfHostLink.vue'
 
 // icons as components for reuse
 const LoginIcon = `<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/>`
@@ -23,7 +27,7 @@ const FileIcon = `<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2
 const EditIcon = `<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>`
 
 // screens and selection states
-type Screen = 'onboarding' | 'setup' | 'connected'
+type Screen = 'onboarding' | 'setup' | 'method-select' | 'connected'
 type Selection = null | 'login' | 'zuliprc' | 'manual'
 type LoginStep = 'server' | 'credentials'
 
@@ -91,6 +95,17 @@ const devTapCount = ref(0)
 const devTapTimeout = ref<ReturnType<typeof setTimeout> | null>(null)
 const devTapMessage = ref('')
 const devTapMessageTimeout = ref<ReturnType<typeof setTimeout> | null>(null)
+// notification method
+const notificationMethod = ref<NotificationMethod | null>(null)
+const notificationMethodConfigured = ref(false)
+const showMethodSelector = ref(false)
+const showCustomWorkerInput = ref(false)
+const pendingMethod = ref<NotificationMethod | null>(null) // for cloud confirmation
+// cloud push
+const cloudPushEnabled = ref(false)
+const cloudPushUrl = ref(DEFAULT_PUSHER_URL)
+const cloudPushStatus = ref<'idle' | 'checking' | 'online' | 'offline' | 'registering' | 'registered' | 'error'>('idle')
+const cloudPushError = ref('')
 const loginError = ref('')
 const isLoggingIn = ref(false)
 const isCheckingServer = ref(false)
@@ -127,6 +142,27 @@ const soundDisplayName = computed(() => {
   return name.replace(/^notification_sound_/, '').replace(/_/g, ' ')
 })
 
+const cloudPushStatusText = computed(() => {
+  switch (cloudPushStatus.value) {
+    case 'checking': return 'Checking server...'
+    case 'online': return 'Server online'
+    case 'offline': return 'Server offline'
+    case 'registering': return 'Registering...'
+    case 'registered': return 'Active'
+    case 'error': return 'Error'
+    default: return ''
+  }
+})
+
+const methodDisplayName = computed(() => {
+  switch (notificationMethod.value) {
+    case 'tab-only': return 'Tab Only'
+    case 'web-push': return 'Web Push'
+    case 'foreground-service': return 'Foreground Service'
+    default: return 'Not set'
+  }
+})
+
 // subscribe to app state
 let unsubscribe: (() => void) | null = null
 let updateInterval: number | null = null
@@ -136,7 +172,21 @@ onMounted(async () => {
     state.value = newState
 
     if (newState.connectionState === 'connected') {
-      screen.value = 'connected'
+      // load notification method from active account
+      const account = newState.activeAccount
+      if (account?.notificationMethod) {
+        notificationMethod.value = account.notificationMethod
+        notificationMethodConfigured.value = true
+        if (account.cloudPushUrl) {
+          cloudPushUrl.value = account.cloudPushUrl
+        }
+        // setup the method (cloud push etc)
+        setupNotificationMethod(account.notificationMethod)
+        screen.value = 'connected'
+      } else {
+        // first time - show method selection
+        screen.value = 'method-select'
+      }
     } else if (newState.savedAccounts.length > 0 && screen.value === 'onboarding') {
       // have saved accounts, go to setup screen
       screen.value = 'setup'
@@ -178,6 +228,27 @@ onMounted(async () => {
   // developer mode
   devMode.value = settings.devMode ?? false
   useJSService.value = settings.useJSService ?? false
+  // notification method
+  notificationMethod.value = settings.notificationMethod ?? null
+  notificationMethodConfigured.value = settings.notificationMethodConfigured ?? false
+  // cloud push
+  cloudPushEnabled.value = settings.cloudPushEnabled ?? false
+  cloudPushUrl.value = settings.cloudPushUrl || DEFAULT_PUSHER_URL
+
+  // restore cloud push state on reload
+  if (cloudPushEnabled.value && isPushSupported()) {
+    const existingSub = await getExistingSubscription()
+    if (existingSub) {
+      // subscription exists, mark as registered
+      cloudPushStatus.value = 'registered'
+    } else {
+      // subscription lost, reset state
+      cloudPushEnabled.value = false
+      cloudPushStatus.value = 'idle'
+      // save the reset state
+      handleNotificationSettingChange()
+    }
+  }
 
   // handle android back button
   CapApp.addListener('backButton', () => {
@@ -380,6 +451,272 @@ async function handleServiceChange() {
   }
 }
 
+// cloud push handlers
+async function checkCloudPusher() {
+  cloudPushStatus.value = 'checking'
+  cloudPushError.value = ''
+  const status = await checkPusherStatus(cloudPushUrl.value)
+  if (status.online) {
+    cloudPushStatus.value = 'online'
+  } else {
+    cloudPushStatus.value = 'offline'
+    cloudPushError.value = status.error || 'server offline'
+  }
+}
+
+async function handleCloudPushToggle() {
+  if (cloudPushEnabled.value) {
+    // enable cloud push
+    await enableCloudPush()
+  } else {
+    // disable cloud push
+    await disableCloudPush()
+  }
+  handleNotificationSettingChange()
+}
+
+// handle notification method selection (from method-select screen or settings)
+async function handleMethodSelect(method: NotificationMethod) {
+  // web-push needs confirmation (sends credentials to server)
+  if (method === 'web-push' && !pendingMethod.value) {
+    pendingMethod.value = method
+    return // wait for confirmation
+  }
+
+  // clear pending state
+  pendingMethod.value = null
+
+  notificationMethod.value = method
+  notificationMethodConfigured.value = true
+
+  // disable any existing cloud push first
+  if (cloudPushEnabled.value) {
+    await disableCloudPush()
+    cloudPushEnabled.value = false
+  }
+  if (Capacitor.isNativePlatform()) {
+    await stopForegroundService()
+  }
+
+  // enable the selected method
+  if (method === 'web-push') {
+    cloudPushEnabled.value = true
+    await enableCloudPush()
+  } else if (method === 'foreground-service' && Capacitor.isNativePlatform()) {
+    await startForegroundService()
+  }
+  // tab-only: nothing extra needed, just polls when connected
+
+  // save to account
+  if (state.value.activeAccount) {
+    state.value.activeAccount.notificationMethod = method
+    state.value.activeAccount.cloudPushUrl = cloudPushUrl.value
+    await app.saveAccount(state.value.activeAccount)
+  }
+
+  // save global settings
+  handleNotificationSettingChange()
+
+  // go to connected screen
+  screen.value = 'connected'
+}
+
+function cancelCloudConfirmation() {
+  pendingMethod.value = null
+}
+
+const isConfirming = ref(false)
+
+async function confirmCloudMethod() {
+  if (!pendingMethod.value || isConfirming.value) return
+  isConfirming.value = true
+
+  const method = pendingMethod.value
+  pendingMethod.value = null
+
+  notificationMethod.value = method
+  notificationMethodConfigured.value = true
+
+  // enable cloud push
+  cloudPushEnabled.value = true
+  await enableCloudPush()
+
+  // save to account
+  if (state.value.activeAccount) {
+    state.value.activeAccount.notificationMethod = method
+    state.value.activeAccount.cloudPushUrl = cloudPushUrl.value
+    await app.saveAccount(state.value.activeAccount)
+  }
+
+  handleNotificationSettingChange()
+  screen.value = 'connected'
+  isConfirming.value = false
+}
+
+// show custom worker URL input
+function handleCustomWorkerClick() {
+  showCustomWorkerInput.value = true
+}
+
+// setup notification method (called on load from account)
+async function setupNotificationMethod(method: NotificationMethod) {
+  if (method === 'web-push') {
+    cloudPushEnabled.value = true
+    await enableCloudPush()
+  } else if (method === 'foreground-service' && Capacitor.isNativePlatform()) {
+    await startForegroundService()
+  }
+  // tab-only: nothing to setup
+}
+
+// save worker URL and re-register
+async function saveWorkerUrl() {
+  // save to account
+  if (state.value.activeAccount) {
+    state.value.activeAccount.cloudPushUrl = cloudPushUrl.value
+    await app.saveAccount(state.value.activeAccount)
+  }
+  handleNotificationSettingChange()
+
+  // re-register with new URL
+  if (cloudPushEnabled.value) {
+    await disableCloudPush()
+    await enableCloudPush()
+  }
+}
+
+// get current filter settings for cloud push
+function getCloudPushFilters() {
+  return {
+    notifyOnMention: notifyOnMention.value,
+    notifyOnDM: notifyOnDM.value,
+    notifyOnOther: notifyOnOther.value,
+    muteSelfMessages: muteSelfMessages.value,
+    mutedStreams: mutedStreams.value,
+    mutedTopics: mutedTopics.value,
+    quietHoursEnabled: quietHoursEnabled.value,
+    quietHoursStart: quietHoursStart.value,
+    quietHoursEnd: quietHoursEnd.value,
+    quietDaysEnabled: quietDaysEnabled.value,
+    quietDays: quietDays.value
+  }
+}
+
+async function enableCloudPush() {
+  if (!isPushSupported()) {
+    cloudPushError.value = 'push notifications not supported in this browser'
+    cloudPushEnabled.value = false
+    return
+  }
+
+  if (!state.value.activeAccount) {
+    cloudPushError.value = 'no active account'
+    cloudPushEnabled.value = false
+    return
+  }
+
+  cloudPushStatus.value = 'registering'
+  cloudPushError.value = ''
+
+  try {
+    // subscribe to push
+    const subscription = await subscribeToPush(cloudPushUrl.value)
+
+    // register with pusher server including filter settings
+    const result = await registerWithPusher(
+      cloudPushUrl.value,
+      subscription,
+      state.value.activeAccount.serverUrl,
+      state.value.activeAccount.email,
+      state.value.activeAccount.apiKey,
+      getCloudPushFilters()
+    )
+
+    if (result.success) {
+      cloudPushStatus.value = 'registered'
+      showDevTapMessage('Cloud push enabled')
+    } else {
+      cloudPushStatus.value = 'error'
+      cloudPushError.value = result.error || 'registration failed'
+      cloudPushEnabled.value = false
+    }
+  } catch (err) {
+    cloudPushStatus.value = 'error'
+    cloudPushError.value = (err as Error).message
+    cloudPushEnabled.value = false
+  }
+}
+
+// sync filter settings to cloud pusher
+async function syncCloudPushFilters() {
+  if (!cloudPushEnabled.value) return
+
+  const subscription = await getExistingSubscription()
+  if (!subscription) return
+
+  const result = await updatePusherFilters(cloudPushUrl.value, subscription.endpoint, getCloudPushFilters())
+  if (!result.success) {
+    console.error('[cloud-push] sync filters failed:', result.error)
+  }
+}
+
+// send test push notification via cloud
+async function sendTestPush() {
+  console.log('[cloud-push] sending test...')
+  const subscription = await getExistingSubscription()
+  if (!subscription) {
+    console.log('[cloud-push] no subscription found')
+    showDevTapMessage('No push subscription')
+    return
+  }
+
+  console.log('[cloud-push] subscription endpoint:', subscription.endpoint.slice(0, 50) + '...')
+  const result = await testPush(cloudPushUrl.value, subscription.endpoint)
+  console.log('[cloud-push] test result:', result)
+
+  if (result.success) {
+    showDevTapMessage('Test sent! Check for notification')
+  } else {
+    showDevTapMessage(`Failed: ${result.error}`)
+    console.error('[cloud-push] test failed:', result.error)
+  }
+}
+
+// local test - show notification directly from browser (no cloud)
+async function sendLocalTestNotification() {
+  console.log('[local-test] sending local notification...')
+
+  if (Notification.permission !== 'granted') {
+    const perm = await Notification.requestPermission()
+    if (perm !== 'granted') {
+      showDevTapMessage('Notification permission denied')
+      return
+    }
+  }
+
+  const reg = await navigator.serviceWorker.ready
+  await reg.showNotification('Local Test', {
+    body: `This is a local test notification (${new Date().toLocaleTimeString()})`,
+    icon: '/pwa-192.png',
+    tag: 'local-test'
+  })
+  showDevTapMessage('Local notification sent!')
+}
+
+async function disableCloudPush() {
+  try {
+    const subscription = await getExistingSubscription()
+    if (subscription) {
+      await unregisterFromPusher(cloudPushUrl.value, subscription.endpoint)
+      await unsubscribeFromPush()
+    }
+    cloudPushStatus.value = 'idle'
+    showDevTapMessage('Cloud push disabled')
+  } catch (err) {
+    console.error('[cloud-push] disable error:', err)
+  }
+}
+
 async function handleLogoutConfirmed() {
   confirmingLogout.value = false
   // remove the active account and disconnect
@@ -404,6 +741,10 @@ function cancelLogout() {
 
 function handleNotificationSettingChange() {
   app.setSettings({
+    // notification method
+    notificationMethod: notificationMethod.value,
+    notificationMethodConfigured: notificationMethodConfigured.value,
+    // notification settings
     playSounds: playSounds.value,
     groupByConversation: groupByConversation.value,
     vibrate: vibrate.value,
@@ -429,8 +770,14 @@ function handleNotificationSettingChange() {
     analyticsEnabled: analyticsEnabled.value,
     // developer
     devMode: devMode.value,
-    useJSService: useJSService.value
+    useJSService: useJSService.value,
+    // cloud push
+    cloudPushEnabled: cloudPushEnabled.value,
+    cloudPushUrl: cloudPushUrl.value
   })
+
+  // sync filter changes to cloud pusher if enabled
+  syncCloudPushFilters()
 }
 
 function addMutedStream() {
@@ -861,6 +1208,47 @@ async function handleDownloadHummus() {
       </div>
     </div>
 
+    <!-- method selection screen (shown after first login) -->
+    <div v-if="screen === 'method-select'" class="screen method-select-screen">
+      <!-- back button -->
+      <BackButton
+        v-if="notificationMethodConfigured || pendingMethod"
+        label="Back"
+        class="top-back-btn"
+        @click="pendingMethod ? cancelCloudConfirmation() : (screen = 'connected')"
+      />
+
+      <header class="screen-header centered-header">
+        <img src="/icon.svg" alt="" class="header-icon" />
+        <h1>{{ notificationMethodConfigured ? 'Change delivery method' : 'Almost there!' }}</h1>
+      </header>
+
+      <!-- web push confirmation dialog -->
+      <div v-if="pendingMethod" class="cloud-confirm-dialog">
+        <p class="confirm-title">Send credentials to server?</p>
+        <p class="confirm-text">
+          Web Push will send your Zulip API key to <strong>{{ cloudPushUrl || DEFAULT_PUSHER_URL }}</strong> so it can poll for messages and send you notifications.
+        </p>
+        <p class="confirm-text">Credentials are encrypted (AES-256), but you're trusting this server. For best security, use Foreground Service or host your own worker.</p>
+
+        <div class="confirm-custom-url">
+          <label>Worker URL (optional)</label>
+          <input type="url" v-model="cloudPushUrl" :placeholder="DEFAULT_PUSHER_URL">
+          <SelfHostLink />
+        </div>
+
+        <button class="primary confirm-continue-btn" :disabled="isConfirming" @click="confirmCloudMethod">
+          {{ isConfirming ? 'Connecting...' : 'I understand, continue' }}
+        </button>
+      </div>
+
+      <!-- method selector (hidden during confirmation) -->
+      <NotificationMethodSelector
+        v-if="!pendingMethod"
+        @select="handleMethodSelect"
+      />
+    </div>
+
     <!-- connected screen -->
     <div v-if="screen === 'connected'" class="screen connected">
       <header class="navbar">
@@ -902,6 +1290,46 @@ async function handleDownloadHummus() {
       </button>
 
       <div v-if="showSettings" class="settings">
+        <!-- delivery method section -->
+        <div class="settings-section">
+          <h3>Delivery Method</h3>
+
+          <div class="current-method">
+            <span class="current-method-name">{{ methodDisplayName }}</span>
+            <button class="small-btn" @click="screen = 'method-select'">Change</button>
+          </div>
+
+          <!-- web push settings -->
+          <div v-if="notificationMethod === 'web-push'" class="cloud-push-inline">
+            <div class="cloud-push-url-inline">
+              <label>Worker URL</label>
+              <div class="url-input-row">
+                <input
+                  type="url"
+                  v-model="cloudPushUrl"
+                  :placeholder="DEFAULT_PUSHER_URL"
+                >
+                <button class="small-btn" @click="saveWorkerUrl">Save</button>
+              </div>
+              <SelfHostLink />
+            </div>
+
+            <div v-if="cloudPushError" class="cloud-push-error">{{ cloudPushError }}</div>
+
+            <div v-if="cloudPushStatus !== 'idle'" class="cloud-push-status">
+              <span class="status-dot" :class="cloudPushStatus"></span>
+              <span>{{ cloudPushStatusText }}</span>
+            </div>
+
+            <div v-if="cloudPushStatus === 'registered'" class="test-buttons">
+              <button class="test-push-btn" @click="sendLocalTestNotification">Local test</button>
+              <button class="test-push-btn" @click="sendTestPush">Cloud test</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-divider"></div>
+
         <div class="settings-section">
           <h3>Notifications</h3>
 

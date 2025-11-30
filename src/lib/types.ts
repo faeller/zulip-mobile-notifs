@@ -1,5 +1,17 @@
 // zulip api types
 
+// cloud pusher URL - single source of truth
+// self-host: https://github.com/faeller/zulip-mobile-notifs/tree/main/worker
+export const DEFAULT_PUSHER_URL = 'https://cf-zulip-web-pusher.faeller.me'
+
+// notification delivery methods
+export type NotificationMethod =
+  | 'web-push'            // web: polls when tab open, cloud push when closed (via CF worker)
+  | 'foreground-service'  // android: native polling (instant, creds on device)
+  | 'tab-only'            // web: only works when tab is open (no cloud, fully private)
+  | 'unified-push'        // android: via UnifiedPush (future)
+  | 'long-poll-server'    // self-hosted long-poll server (future)
+
 export type AuthMethod = 'password' | 'sso' | 'zuliprc' | 'manual'
 
 export interface ZulipCredentials {
@@ -7,6 +19,8 @@ export interface ZulipCredentials {
   email: string
   apiKey: string
   authMethod?: AuthMethod  // how the credentials were obtained
+  notificationMethod?: NotificationMethod  // per-account delivery method
+  cloudPushUrl?: string  // custom worker URL (if using cloud push)
 }
 
 // unique identifier for an account (server + email combo)
@@ -65,6 +79,9 @@ export type AnyZulipEvent = MessageEvent | HeartbeatEvent | ZulipEvent
 // app settings (persisted)
 export interface AppSettings {
   keepaliveSec: number // long-poll keepalive interval in seconds
+  // notification method
+  notificationMethod: NotificationMethod | null // null = not yet chosen
+  notificationMethodConfigured: boolean // true after user has made initial choice
   // notification settings
   playSounds: boolean // play notification sounds
   groupByConversation: boolean // true = stack msgs per conversation, false = separate notifs
@@ -92,10 +109,15 @@ export interface AppSettings {
   // developer options (hidden until activated)
   devMode: boolean // show developer settings
   useJSService: boolean // use rhino-based JSPollingService instead of native
+  // cloud push (web only)
+  cloudPushEnabled: boolean
+  cloudPushUrl: string // pusher server URL
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
   keepaliveSec: 90,
+  notificationMethod: null,
+  notificationMethodConfigured: false,
   playSounds: true,
   groupByConversation: true,
   vibrate: true,
@@ -121,7 +143,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   analyticsEnabled: true,
   // developer options
   devMode: false,
-  useJSService: false
+  useJSService: false,
+  // cloud push
+  cloudPushEnabled: false,
+  cloudPushUrl: DEFAULT_PUSHER_URL
 }
 
 // app state

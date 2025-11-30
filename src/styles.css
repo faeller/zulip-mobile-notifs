@@ -836,6 +836,128 @@ button.danger:hover:not(:disabled) {
   color: white;
 }
 
+/* cloud push section */
+.cloud-push-error {
+  color: var(--error);
+  font-size: 13px;
+  margin-top: 8px;
+}
+
+.cloud-push-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+}
+
+.status-dot.online,
+.status-dot.registered {
+  background: #22c55e;
+}
+
+.status-dot.offline,
+.status-dot.error {
+  background: var(--error);
+}
+
+.status-dot.checking,
+.status-dot.registering {
+  background: #f59e0b;
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.cloud-push-url {
+  margin-top: 16px;
+}
+
+.cloud-push-url label {
+  display: block;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.cloud-push-url input {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.cloud-push-url input:disabled {
+  opacity: 0.6;
+}
+
+.cloud-push-url small {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.cloud-push-url small a {
+  color: var(--primary);
+}
+
+.check-pusher-btn {
+  margin-top: 12px;
+  padding: 8px 16px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.check-pusher-btn:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.check-pusher-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.test-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.test-push-btn {
+  padding: 6px 12px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.test-push-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
 /* developer section */
 .dev-btn {
   margin-top: 16px;
@@ -1085,6 +1207,151 @@ button.danger:hover:not(:disabled) {
   background: var(--surface);
   border-radius: var(--radius-sm);
   margin-bottom: 16px;
+}
+
+/* method selection screen */
+.method-select-screen {
+  justify-content: center;
+}
+
+/* cloud method confirmation dialog */
+.cloud-confirm-dialog {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+
+.confirm-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: var(--text);
+}
+
+.confirm-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+
+.confirm-text strong {
+  color: var(--text);
+  word-break: break-all;
+}
+
+.confirm-custom-url {
+  margin: 16px 0;
+}
+
+.confirm-custom-url label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.confirm-custom-url input {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.back-link {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  padding: 0;
+  margin-bottom: 12px;
+  cursor: pointer;
+}
+
+.back-link:hover {
+  color: var(--text);
+}
+
+.confirm-continue-btn {
+  width: 100%;
+  margin-top: 16px;
+  padding: 14px;
+  font-size: 14px;
+}
+
+/* delivery method in settings */
+.current-method {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.current-method-name {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.method-selector-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cancel-btn {
+  align-self: flex-end;
+}
+
+/* cloud push inline settings */
+.cloud-push-inline {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.cloud-push-url-inline {
+  margin-bottom: 12px;
+}
+
+.cloud-push-url-inline label {
+  display: block;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.url-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.url-input-row input {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  min-width: 0;
+}
+
+.cloud-push-url-inline small {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.cloud-push-url-inline small a {
+  color: var(--primary);
 }
 
 /* safe area for notch devices */
