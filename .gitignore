@@ -14,3 +14,4 @@ android/local.properties
 md_docs/
 release.keystore
 .pnpm-store/
+dev-dist/

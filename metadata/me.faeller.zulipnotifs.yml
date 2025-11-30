@@ -68,5 +68,5 @@ Builds:
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags
-CurrentVersion: 0.5.7
-CurrentVersionCode: 507
+CurrentVersion: 0.6.2
+CurrentVersionCode: 602

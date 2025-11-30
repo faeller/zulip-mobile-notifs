@@ -1,0 +1,5 @@
+Web Push notifications via Cloudflare Worker
+Notification method selector (Foreground Service, Web Push, Tab Only)
+PWA support with service worker
+Fix SSO browser close handling
+Fix foreground service startup crash
