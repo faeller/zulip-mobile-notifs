@@ -15,3 +15,6 @@ md_docs/
 release.keystore
 .pnpm-store/
 dev-dist/
+
+# worker config (use wrangler.toml.example for manual setup)
+worker/wrangler.toml

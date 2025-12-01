@@ -40,12 +40,17 @@ class BrowserNotifications implements NotificationService {
     }
   }
 
-  private playSound(): void {
+  private playCustomSound(): void {
     if (this.audioElement) {
       // clone and play to allow overlapping
       const sound = this.audioElement.cloneNode() as HTMLAudioElement
       sound.play().catch(() => {})
     }
+  }
+
+  // play sound only (for web-push mode when tab is open)
+  playSound(): void {
+    this.playCustomSound()
   }
 
   async showNotification(title: string, body: string, tag?: string, options?: NotificationOptions): Promise<void> {
@@ -67,7 +72,7 @@ class BrowserNotifications implements NotificationService {
 
     // only play custom sound if sound enabled and custom sound exists
     if (shouldPlaySound && hasCustomSound) {
-      this.playSound()
+      this.playCustomSound()
     }
   }
 }

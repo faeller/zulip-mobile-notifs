@@ -493,10 +493,15 @@ export class App {
     const { title, body } = this.formatNotification(msg)
     console.log('[message] showing notification:', { title, body })
 
-    // tag by sender to avoid duplicate notification spam
-    notifications.showNotification(title, body, `msg-${msg.sender_id}`, {
-      silent: !this.state.settings.playSounds
-    })
+    const isWebPush = this.state.settings.notificationMethod === 'web-push'
+    if (isWebPush) {
+      // web-push handles notification, just play sound
+      if (this.state.settings.playSounds) notifications.playSound?.()
+    } else {
+      notifications.showNotification(title, body, `msg-${msg.sender_id}`, {
+        silent: !this.state.settings.playSounds
+      })
+    }
 
     // track last notified message id
     if (msg.id > this.lastNotifiedMsgId) {
@@ -519,8 +524,11 @@ export class App {
 
       if (newUnreads.length === 0) return
 
-      // batch into single notification if multiple
-      if (newUnreads.length > 1) {
+      const isWebPush = this.state.settings.notificationMethod === 'web-push'
+      if (isWebPush) {
+        // web-push handles notifications, just play sound
+        if (this.state.settings.playSounds) notifications.playSound?.()
+      } else if (newUnreads.length > 1) {
         const title = `${newUnreads.length} missed messages`
         const body = newUnreads
           .slice(0, 5)

@@ -343,7 +343,8 @@ async function sendPushNotification(sub: Subscription, msg: ZulipMessage, env: E
     title,
     body,
     tag: `zulip-${msg.id}`,
-    messageId: msg.id
+    messageId: msg.id,
+    url: sub.zulipServerUrl
   })
 
   try {
@@ -369,11 +370,26 @@ async function sendPushNotification(sub: Subscription, msg: ZulipMessage, env: E
 
 function stripHtml(html: string): string {
   return html
+    // html tags
     .replace(/<[^>]*>/g, '')
+    // html entities
     .replace(/&nbsp;/g, ' ')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&amp;/g, '&')
+    // zulip-specific
+    .replace(/@_?\*\*([^|*]+)(?:\|[^*]+)?\*\*/g, '@$1') // @_**Name|id** -> @Name
+    .replace(/```quote\s*\n?([\s\S]*?)\s*```\s*/g, '"$1"\n') // ```quote...``` -> "content"
+    .replace(/``([^`]+)``/g, '"$1"')             // ``inline quote`` -> "content"
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')     // [link](url) -> link
+    // markdown formatting
+    .replace(/\*\*([^*]+)\*\*/g, '$1')           // **bold**
+    .replace(/__([^_]+)__/g, '$1')               // __bold__
+    .replace(/\*([^*]+)\*/g, '$1')               // *italic*
+    .replace(/~~([^~]+)~~/g, '$1')               // ~~strike~~
+    .replace(/^>\s?/gm, '')                      // > blockquotes
+    .replace(/^#{1,6}\s+/gm, '')                 // # headers
+    // whitespace
     .replace(/\s+/g, ' ')
     .trim()
 }

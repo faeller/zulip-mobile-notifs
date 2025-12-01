@@ -166,6 +166,13 @@ let unsubscribe: (() => void) | null = null
 let updateInterval: number | null = null
 
 onMounted(async () => {
+  // listen for service worker requests (e.g. openZulipApp setting)
+  navigator.serviceWorker?.addEventListener('message', (event) => {
+    if (event.data?.type === 'getOpenZulipApp' && event.ports[0]) {
+      event.ports[0].postMessage(openZulipApp.value)
+    }
+  })
+
   unsubscribe = app.onStateChange((newState) => {
     state.value = newState
 
@@ -390,6 +397,10 @@ async function handleManualConnect() {
 }
 
 async function handleDisconnect() {
+  // unregister from web push if enabled
+  if (notificationMethod.value === 'web-push') {
+    await disableCloudPush()
+  }
   await app.disconnect()
   screen.value = 'setup'
   selection.value = null
@@ -553,7 +564,7 @@ async function confirmCloudMethod() {
 async function setupNotificationMethod(method: NotificationMethod) {
   if (method === 'web-push') {
     cloudPushEnabled.value = true
-    await enableCloudPush()
+    await enableCloudPush(true) // silent on restore
   } else if (method === 'foreground-service' && Capacitor.isNativePlatform()) {
     await startForegroundService()
   }
@@ -593,7 +604,7 @@ function getCloudPushFilters() {
   }
 }
 
-async function enableCloudPush() {
+async function enableCloudPush(silent = false) {
   if (!isPushSupported()) {
     cloudPushError.value = 'push notifications not supported in this browser'
     cloudPushEnabled.value = false
@@ -625,7 +636,7 @@ async function enableCloudPush() {
 
     if (result.success) {
       cloudPushStatus.value = 'registered'
-      showDevTapMessage('Cloud push enabled')
+      if (!silent) showDevTapMessage('Cloud push enabled')
     } else {
       cloudPushStatus.value = 'error'
       cloudPushError.value = result.error || 'registration failed'
@@ -710,6 +721,10 @@ async function disableCloudPush() {
 
 async function handleLogoutConfirmed() {
   confirmingLogout.value = false
+  // unregister from web push if enabled
+  if (notificationMethod.value === 'web-push') {
+    await disableCloudPush()
+  }
   // remove the active account and disconnect
   if (state.value.activeAccount) {
     await app.removeAccount(state.value.activeAccount)
@@ -1277,7 +1292,7 @@ async function handleDownloadHummus() {
         </div>
         <div class="status-info">
           <strong>{{ statusLabel }}</strong>
-          <span class="status-detail">Last update: {{ lastUpdateText }}</span>
+          <span v-if="notificationMethod !== 'web-push'" class="status-detail">Last activity: {{ lastUpdateText }}</span>
         </div>
       </div>
 

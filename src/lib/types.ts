@@ -178,4 +178,5 @@ export interface NotificationService {
   requestPermission(): Promise<boolean>
   isSupported(): boolean
   showNotification(title: string, body: string, tag?: string, options?: NotificationOptions): Promise<void>
+  playSound?(): void // optional, for web-push sound-only mode
 }
